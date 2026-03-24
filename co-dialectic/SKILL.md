@@ -66,6 +66,15 @@ Improvement criteria:
 
 Over days, your suggestions should appear less often — because the user is improving.
 
+**Track prompt quality over time.** Keep a running count of ✅ Clear vs 💡 Improve across the session. When the user asks for status or review, report the trend as a percentage: `Prompt Quality: {X}% clear`. Example progression across sessions:
+
+- Day 1: `Prompt Quality: 45% clear` — most prompts need improvement
+- Day 3: `Prompt Quality: 62% clear` — learning is visible
+- Day 7: `Prompt Quality: 78% clear` — patterns internalized
+- Day 10: `Prompt Quality: 91% clear` — near-fluent communication
+
+This metric is the flywheel made visible. Show it in every status report.
+
 ### Protocol 4: Context Management + Auto-Handoff
 
 Track context usage across the conversation. Update the Context indicator on every response.
