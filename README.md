@@ -4,6 +4,8 @@
 
 Free. Open-source. Works with Claude, ChatGPT, Gemini — any AI.
 
+![Co-Dialectic — prompt quality from 45% to 91% in 10 days](co-dialectic/social-preview-github.png)
+
 ---
 
 ## Co-Dialectic
@@ -47,10 +49,6 @@ Tell your AI how you like to communicate:
 > *"Don't give me answers. Ask me questions that lead me there."*
 
 One sentence. The AI captures it and adapts going forward.
-
-### See it in action
-
-![Co-Dialectic prompt coaching](co-dialectic/co-dialectic-hero.png)
 
 ### Results
 

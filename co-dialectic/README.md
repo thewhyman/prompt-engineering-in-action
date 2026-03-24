@@ -2,7 +2,7 @@
 
 **Free. Open-source. One install. In 10 days, you and your AI stop needing corrections.**
 
-![Co-Dialectic in action — your AI coaches your prompts in real time](co-dialectic-hero.png)
+![Co-Dialectic — prompt quality from 45% to 91% in 10 days](social-preview-github.png)
 
 ---
 
