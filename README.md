@@ -144,6 +144,16 @@ The viral Socratic posts teach you to ask better questions. Co-Dialectic teaches
 
 ---
 
+## [Coming Soon]
+
+**Deep Personalization** — Tell your AI your story. Your industry, your goals, your communication style. It customizes to you without leaking PII. Your data stays yours.
+
+**AI Career Coach** — AI is reshaping every industry. This skill reads the landscape and helps you maximize career upside while protecting downside — which skills to learn, when to move, how to position yourself. The same framework that helped the author choose frontier AI companies over starting a startup.
+
+Subscribe at **[thewhyman.blog](https://thewhyman.blog)** to get notified when they launch.
+
+---
+
 ## Contributing
 
 This library grows through practice. If you discover a technique that works, submit a PR:
