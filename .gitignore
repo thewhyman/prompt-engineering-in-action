@@ -4,3 +4,16 @@
 *handoff*
 NEXT_SESSION_HANDOFF.md
 handoff.md
+
+# Private review reports — never commit to public repo
+_codex-*.md
+_gemini-*.md
+_review-*.md
+*-review-*.md
+_*-audit-*.md
+
+# Local Claude Code settings (per-machine)
+.claude/settings.local.json
+
+# Internal context-sharing markers
+.context-sharing-last-seen-sha

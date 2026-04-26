@@ -48,16 +48,16 @@ On trigger, enumerate candidate adjacencies by scanning these context sources, i
 Read the user's memory index. Candidate paths (skip any that don't exist):
 
 - `~/.claude/agent-memory/*/MEMORY.md` — agent-scoped memory indices
-- `~/anand-career-os/.career-os/memory/MEMORY.md` — Career OS memory
-- `~/anand-career-os/.career-os/memory/identity.md`
-- `~/anand-career-os/.career-os/memory/professional-brand.md`
-- `~/anand-career-os/.career-os/memory/content-distribution-flywheel.md`
+- `$COD_WORKSPACE_DIR/.cod/memory/MEMORY.md` — Career OS memory
+- `$COD_WORKSPACE_DIR/.cod/memory/identity.md`
+- `$COD_WORKSPACE_DIR/.cod/memory/professional-brand.md`
+- `$COD_WORKSPACE_DIR/.cod/memory/content-distribution-flywheel.md`
 
 ### 2. Active workstreams
 
-Read `~/anand-career-os/workspace.manifest.yaml` to enumerate active WIPs. Each entry is a candidate adjacency.
+Read `$COD_WORKSPACE_DIR/workspace.manifest.yaml` to enumerate active WIPs. Each entry is a candidate adjacency.
 
-Also glob `~/anand-career-os/WIP/*-product/` — the folder names alone reveal adjacencies (agencyOS, xOS, co-dialectic, humanOS, familyOS, etc.).
+Also glob `$COD_WORKSPACE_DIR/WIP/*-product/` — the folder names alone reveal adjacencies (agencyOS, xOS, co-dialectic, humanOS, familyOS, etc.).
 
 ### 3. Current conversation context
 
@@ -86,11 +86,11 @@ After scanning, emit a bulleted adjacency map. Be specific — name the files an
 [Unknown Unknown: N-dimensional extraction]
 
 This insight also touches:
-  • Brand — sharpens "Start with Why" identity (.career-os/memory/identity.md)
+  • Brand — sharpens "Start with Why" identity (.cod/memory/identity.md)
   • Framework — worth codifying in CONSTITUTION.md as a P<X> litmus test
   • Product feature — slots into Co-Dialectic plugin #9 (Cross-Pollinator) or AgencyOS specialist
   • Marketing hook — candidate LinkedIn post for co-dialectic/03_CONTENT/
-  • Relationship — relevant to <name> (see .career-os/memory/people/<slug>.md)
+  • Relationship — relevant to <name> (see .cod/memory/people/<slug>.md)
 
 Want to extract into any of these? (say "extract to <slot>" or "extract to all")
 ```

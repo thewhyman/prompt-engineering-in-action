@@ -106,7 +106,7 @@ Skip the conversational framing.
         └──────────────────┘
 ```
 
-## Models used (pinned, read from ~/cyborg/.env)
+## Models used (pinned, read from `$COD_ENV_FILE`, default `~/.codialectic/.env`)
 
 | Stage | Model | Family | Role | Typical cost |
 |---|---|---|---|---|

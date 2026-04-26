@@ -233,7 +233,7 @@ Any runtime that exposes these six surfaces can claim "Co-Dialectic-compatible."
 
 - **No proprietary eval dataset.** The 8-case seeded-flaw corpus is tiny by design — a pilot, not a paper. The 50-case controlled experiment is the forthcoming Defense-in-Depth Part 3 publication.
 - **No telemetry beyond opt-in install metrics.** Beacons-emitter (plugin #5 in the BASE-PLUGINS-V3 spec) is scoped for v4.0. Until then, nothing leaves the device except the Scarf pixel on install (OS + tool choice, tied to the user's consent in the installer).
-- **No single-vendor lock-in.** The judge-panel's model pins come from `~/cyborg/.env`. Change the two small-fish judges to any cross-family pair (Mistral + Llama, Gemini + Mistral, etc.); the cascade logic doesn't care.
+- **No single-vendor lock-in.** The judge-panel's model pins come from `$COD_ENV_FILE` (default `~/.codialectic/.env`). Change the two small-fish judges to any cross-family pair (Mistral + Llama, Gemini + Mistral, etc.); the cascade logic doesn't care.
 - **No Chrome extension / local LLM yet.** Those are Phase 3 — client-side, edge-compute, zero-token-cost. Phase 2 leaves the hooks in place (judge-panel already runs stdlib Python with no cloud assumption beyond the two API calls); Phase 3 swaps the two API calls for local Ollama/llama.cpp invocations without changing the cascade logic.
 
 ---

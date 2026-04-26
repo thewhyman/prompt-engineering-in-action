@@ -20,7 +20,7 @@ All notable changes to this repository are tracked here. This project follows [S
 
 ### Infrastructure — anti-drift (workspace-level)
 
-This ships on the **workspace** side (`anand-career-os`), not in the plugin repo:
+This ships on the **workspace** side (the maintainer's private workspace repo), not in the plugin repo:
 
 - **`ci/skill-compiler.sh` NEW** — reads `workspace.manifest.yaml`, iterates `(skill, agent)` pairs, runs per-agent transformer, writes target with auto-generated banner + canonical-SHA stamp. Same pattern as `ci/mcp-compiler.sh`. Two transformers today: `claude-code` (identity copy) + `antigravity` (identity copy). Stubs for cursor / gemini-cli / codex / cowork / windsurf / cline / aider / roo warn pending v3.4.0 without silently failing.
 - **`workspace.manifest.yaml` updated** — `antigravity` added to `distribute_to` enum for the co-dialectic skill. Ownership note inlined: only Co-Dialectic thread edits canonical.

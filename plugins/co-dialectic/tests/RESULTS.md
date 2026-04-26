@@ -64,7 +64,7 @@ python3 tests/judge_panel_eval.py --output results.json
 
 Requires:
 - `gemini` CLI on PATH (Google)
-- `OPENAI_API_KEY` env var (read from `~/cyborg/.env` automatically if present)
+- `OPENAI_API_KEY` env var (read from `$COD_ENV_FILE` (default `~/.codialectic/.env`) automatically if present)
 - Python 3.10+ (stdlib only — no pip install)
 
 ## Related

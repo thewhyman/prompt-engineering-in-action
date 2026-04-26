@@ -4,7 +4,8 @@
 Small-fish first: ≥2 cross-family cheap judges in parallel.
 Escalate to one big-fish cross-family tiebreaker on disagreement or low confidence.
 
-Reads model pins from ~/cyborg/.env. Shells out to `gemini` + `codex` CLIs.
+Reads model pins from $COD_ENV_FILE (defaults to ~/.codialectic/.env).
+Shells out to `gemini` + `codex` CLIs (or hits OpenAI HTTP directly).
 
 Usage:
     python3 judge_panel.py --rubric hallucination --artifact "..."
@@ -31,9 +32,9 @@ from typing import Optional
 VERSION = "3.0.0"
 
 # ---------------------------------------------------------------------------
-# Config — model pins loaded from ~/cyborg/.env (authoritative per P20)
+# Config — model pins loaded from $COD_ENV_FILE (defaults to ~/.codialectic/.env)
 
-CYBORG_ENV = Path.home() / "cyborg" / ".env"
+COD_ENV_FILE = Path(os.environ.get("COD_ENV_FILE", str(Path.home() / ".codialectic" / ".env")))
 
 
 def _load_env(path: Path) -> dict:
@@ -49,7 +50,7 @@ def _load_env(path: Path) -> dict:
     return env
 
 
-_ENV = _load_env(CYBORG_ENV)
+_ENV = _load_env(COD_ENV_FILE)
 os.environ.setdefault("OPENAI_API_KEY", _ENV.get("OPENAI_API_KEY", ""))
 os.environ.setdefault("GEMINI_API_KEY", _ENV.get("GEMINI_API_KEY", ""))
 os.environ.setdefault("ANTHROPIC_API_KEY", _ENV.get("ANTHROPIC_API_KEY", ""))

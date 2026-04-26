@@ -7,21 +7,21 @@
 ## Repo Structure
 
 - **This repo is PUBLIC** (`github.com/thewhyman/prompt-engineering-in-action`). Only code, skills, installer, README, and open-source docs belong here.
-- **Marketing strategy, campaign docs, and private content go in `anand-career-os` (private repo)** at `WIP/co-dialectic/03_CONTENT/`. Never commit strategy to this public repo.
-- **Handoff doc:** `anand-career-os/WIP/co-dialectic/NEXT_SESSION_HANDOFF_co-dialectic.md`
+- **Marketing strategy, campaign docs, and private content live in your private workspace repo.** Never commit strategy, campaign drafts, or identity files to this public repo.
+- **Handoff doc:** `<your-workspace>/WIP/co-dialectic/NEXT_SESSION_HANDOFF_co-dialectic.md`
 
-## Private Repo References (anand-career-os)
+## Private Workspace References
 
-When working on marketing, distribution, or identity-related tasks, lazy-load from these files:
+When working on marketing, distribution, or identity-related tasks, lazy-load from your private workspace at `$COD_WORKSPACE_DIR` (or whatever the maintainer's local convention is). Typical layout:
 
-- **Content distribution flywheel:** `.career-os/memory/content-distribution-flywheel.md` — platform choices, algorithm rules, campaign patterns, hub URLs, posting rules
-- **Identity:** `.career-os/memory/identity.md` — who Anand is, philosophies, values, co-intelligence thesis
-- **Professional brand:** `.career-os/memory/professional-brand.md` — brand statement, headlines, LinkedIn about, differentiators
-- **Brand identity & handles:** `WIP/common/BRAND_IDENTITY.md` — master social handle table, creative assets
-- **Campaign status:** `WIP/co-dialectic/CAMPAIGN_STATUS.md` — execution state, engagement metrics, what's posted/pending
-- **Article drafts:** `WIP/co-dialectic/03_CONTENT/` — Substack drafts, LinkedIn articles, social post copy
+- **Content distribution flywheel:** `$COD_WORKSPACE_DIR/.cod/memory/content-distribution-flywheel.md` — platform choices, algorithm rules, campaign patterns, hub URLs, posting rules
+- **Identity:** `$COD_WORKSPACE_DIR/.cod/memory/identity.md` — who the maintainer is, philosophies, values, co-intelligence thesis
+- **Professional brand:** `$COD_WORKSPACE_DIR/.cod/memory/professional-brand.md` — brand statement, headlines, LinkedIn about, differentiators
+- **Brand identity & handles:** `$COD_WORKSPACE_DIR/WIP/common/BRAND_IDENTITY.md` — master social handle table, creative assets
+- **Campaign status:** `$COD_WORKSPACE_DIR/WIP/co-dialectic/CAMPAIGN_STATUS.md` — execution state, engagement metrics, what's posted/pending
+- **Article drafts:** `$COD_WORKSPACE_DIR/WIP/co-dialectic/03_CONTENT/` — Substack drafts, LinkedIn articles, social post copy
 
-Generic distribution principles live in the Constitution (P16 Content Flywheel). These files are the personal Layer 2 choices.
+Generic distribution principles live in the open-source `docs/PROTOCOL.md`. These files are personal/maintainer-specific layer-2 choices.
 
 ## Plugin System
 
