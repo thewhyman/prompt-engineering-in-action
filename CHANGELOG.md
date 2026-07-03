@@ -6,6 +6,10 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.32.0] - 2026-07-03
+
+- Local-test / verify-access love-nudge (XOS-195 Slice A) — fail-open Stop-hook that catches 'can't test locally / no auth' responses lacking local-test evidence and reframes toward checking env + testing locally. Fires in every session.
+
 ## [4.31.0] — 2026-07-01 — XOS-167: unify co-dialectic statusline state source
 
 XOS-167: statusline now reads the SAME state source as the survival hook (brain-kernel `co-dialectic/status-state.json` first, legacy `~/.codialectic/state.json` fallback), fixing the split-brain where a single heartbeat left the terminal statusline stale → false DEGRADED. One heartbeat to the brain-kernel path now keeps both the terminal statusline and the survival hook green. Migrated statusline STATE_PATH from legacy-only to brain-kernel-first+fallback; removed the legacy-only read.

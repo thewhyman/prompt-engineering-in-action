@@ -446,6 +446,7 @@ export function buildReminder(
     `${modeLine}`,
     `${verbosityLine}`,
     `${scoresLine}`,
+    "Local verification: credentials for local runs are usually already in the project's env/config files (.env / .env.local); local testing is expected before you claim done — run it and paste the output.",
     "",
     "Protocol 1 (Status Line): begin EVERY response with the persona/score/Cal/[HH:MM] line — the [HH:MM] is the time from the OS-grounded Now line above (never recalled), so the user sees the response is temporally grounded and can scroll back to a moment. A score requires codi to be LIVE (a fresh heartbeat within the liveness window — the same rule the terminal status line uses); otherwise render `⚠ Codi DEGRADED`, never a %. On a day boundary use [MM-DD HH:MM].",
     "Protocol 1 Heartbeat: when you render the status line, write ~/.codialectic/state.json last_protocol_ts=current ISO time, version=installed_version, and current last_score/last_cal/persona/mode. This is model-owned proof of execution; hooks must not fake it.",
