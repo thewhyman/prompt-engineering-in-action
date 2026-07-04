@@ -47,8 +47,8 @@ function baseState(overrides: Record<string, unknown> = {}): Record<string, unkn
     last_score: 88,
     last_cal: 96,
     wildcard: false,
-    installed_version: "4.33.0",
-    version: "4.33.0",
+    installed_version: "4.34.0",
+    version: "4.34.0",
     last_session_start_ts: isoSeconds(new Date(now - 60_000)),
     last_protocol_ts: isoSeconds(new Date(now - 1_000)),
     growth_total_turns: 12,
@@ -87,7 +87,7 @@ function runStatuslineVerdict(home: string): "LIVE" | "DEGRADED" {
   return stdout.includes("DEGRADED") ? "DEGRADED" : "LIVE";
 }
 
-function makePluginRoot(version = "4.33.0"): string {
+function makePluginRoot(version = "4.34.0"): string {
   const pluginRoot = makeTempDir("codi-xos-197-plugin-");
   mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
   mkdirSync(join(pluginRoot, "hooks"), { recursive: true });
@@ -156,7 +156,7 @@ describe("XOS-197 grace-window liveness", () => {
         last_protocol_ts: isoSeconds(new Date(now.getTime() - 382_000)),
         last_session_start_ts: isoSeconds(new Date(now.getTime() - 10_000)),
       }),
-      "4.33.0",
+      "4.34.0",
       now,
       900,
     );
@@ -174,7 +174,7 @@ describe("XOS-197 grace-window liveness", () => {
           last_protocol_ts: isoSeconds(new Date(now.getTime() - ageSecs * 1000)),
           last_session_start_ts: isoSeconds(new Date(now.getTime() + 1_000)),
         }),
-        "4.33.0",
+        "4.34.0",
         now,
         900,
       );
@@ -191,7 +191,7 @@ describe("XOS-197 grace-window liveness", () => {
         last_protocol_ts: isoSeconds(new Date(now.getTime() - 901_000)),
         last_session_start_ts: isoSeconds(new Date(now.getTime() - 60_000)),
       }),
-      "4.33.0",
+      "4.34.0",
       now,
       900,
     );
@@ -204,9 +204,9 @@ describe("XOS-197 grace-window liveness", () => {
   test("missing state, absent heartbeat, and active:false remain DEGRADED", () => {
     const now = new Date("2026-07-03T12:00:00Z");
 
-    expect(evaluateCodiLiveness(null, "4.33.0", now, 900).degraded).toBe(true);
-    expect(evaluateCodiLiveness(baseState({ last_protocol_ts: null }), "4.33.0", now, 900).degraded).toBe(true);
-    expect(evaluateCodiLiveness(baseState({ active: false }), "4.33.0", now, 900).degraded).toBe(true);
+    expect(evaluateCodiLiveness(null, "4.34.0", now, 900).degraded).toBe(true);
+    expect(evaluateCodiLiveness(baseState({ last_protocol_ts: null }), "4.34.0", now, 900).degraded).toBe(true);
+    expect(evaluateCodiLiveness(baseState({ active: false }), "4.34.0", now, 900).degraded).toBe(true);
   });
 
   test("statusline verdict matches hook verdict for the XOS-197 repro state", () => {
@@ -218,7 +218,7 @@ describe("XOS-197 grace-window liveness", () => {
     });
     writeState(home, state);
 
-    const hookVerdict = evaluateCodiLiveness(state, "4.33.0", now, 900).degraded
+    const hookVerdict = evaluateCodiLiveness(state, "4.34.0", now, 900).degraded
       ? "DEGRADED"
       : "LIVE";
     const stopHookVerdict = evaluateStatusFreshness(state, now, 900).degraded
@@ -232,7 +232,7 @@ describe("XOS-197 grace-window liveness", () => {
 
   test("install-survival-layer merge preserves model-owned state and session marker", () => {
     const home = makeTempDir("codi-xos-197-home-");
-    const pluginRoot = makePluginRoot("4.33.0");
+    const pluginRoot = makePluginRoot("4.34.0");
     const priorProtocol = isoSeconds(new Date(Date.now() - 120_000));
     const priorSession = "2026-07-03T01:02:03Z";
     writeState(
@@ -255,7 +255,7 @@ describe("XOS-197 grace-window liveness", () => {
     const statePath = join(home, ".codialectic", "state.json");
     expect(existsSync(statePath)).toBe(true);
     const state = JSON.parse(readFileSync(statePath, "utf8"));
-    expect(state.installed_version).toBe("4.33.0");
+    expect(state.installed_version).toBe("4.34.0");
     expect(state.version).toBe("4.30.0");
     expect(state.growth_total_turns).toBe(37);
     expect(state.last_protocol_ts).toBe(priorProtocol);
@@ -273,7 +273,7 @@ describe("XOS-197 grace-window liveness", () => {
     });
     delete state.last_session_start_ts;
 
-    const liveness = evaluateCodiLiveness(state, "4.33.0", now, 900);
+    const liveness = evaluateCodiLiveness(state, "4.34.0", now, 900);
 
     expect(liveness.degraded).toBe(false);
     expect(liveness.stale).toBe(false);

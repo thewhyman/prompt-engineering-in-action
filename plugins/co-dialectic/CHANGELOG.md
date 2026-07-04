@@ -1,5 +1,11 @@
 # Changelog — Co-Dialectic
 
+## [4.34.0] — 2026-07-04 — XOS-199: cost-routing love-nudge
+
+### Added
+- Add a never-blocking Stop detector for whale-model fish-work: current-turn authored code volume, browser-driving thresholds, delegation suppression, whale-model gating, per-session escalation, and a three-fire cap.
+- Add UserPromptSubmit next-prompt injection so the cost-routing nudge reaches the model before the following turn's routing plan, then clears the pending flag.
+
 ## [4.33.0] — 2026-07-03 — XOS-197: false DEGRADED liveness fix
 
 ### Fixed
