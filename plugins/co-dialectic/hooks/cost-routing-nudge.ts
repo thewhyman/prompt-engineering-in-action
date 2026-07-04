@@ -542,6 +542,9 @@ function hasDelegationEvidence(toolUse: Record<string, unknown>): boolean {
   if (!isBashFamilyTool(name)) return false;
   return commandStringsFromToolUse(toolUse).some((command) =>
     /\bcodex\s+exec\b/i.test(command) ||
+    // Google-family fish: agy (Antigravity) is the current CLI; gemini CLI is
+    // deprecated (IneligibleTierError → migrate to Antigravity) but tolerated as legacy.
+    /\bagy\s+(-p|--print|--prompt|-i|--model)\b/i.test(command) ||
     /\bgemini\s+-m\b/i.test(command) ||
     /\bgemini-2\.5-flash\b/i.test(command) ||
     /\/ship-feature\b/i.test(command)
@@ -650,9 +653,11 @@ function codeAgentTarget(): string {
 }
 
 function browserAgentTarget(): string {
-  return commandAvailable("gemini")
-    ? "Flash (`gemini -m gemini-2.5-flash`)"
-    : "your browser agent";
+  // agy (Antigravity) is the current Google-family CLI; the gemini CLI is
+  // deprecated. Prefer agy Flash; fall back to gemini only if agy is absent.
+  if (commandAvailable("agy")) return "Flash (`agy -p ... --model \"Gemini 3.5 Flash (Low)\"`)";
+  if (commandAvailable("gemini")) return "Flash (`gemini -m gemini-2.5-flash`)";
+  return "your browser agent";
 }
 
 function ordinal(value: number): string {
