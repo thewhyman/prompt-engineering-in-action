@@ -317,7 +317,7 @@ verdict without prompting the main LLM again.
 
 ```json
 {
-  "version": "3.1.0",
+  "version": "3.4.0",
   "rubric": "hallucination",
   "cascade": {
     "stage_1_small_fish": [
@@ -349,6 +349,11 @@ verdict without prompting the main LLM again.
   },
   "final_verdict": "pass",
   "final_confidence": 86,
+  "cross_family": {
+    "distinct_families_returned": 2,
+    "degraded": false,
+    "down_lanes": []
+  },
   "all_flags": [],
   "cost_usd_estimate": 0.0041,
   "cost_vs_naive_parallel_jury_ratio": 0.32
@@ -358,6 +363,38 @@ verdict without prompting the main LLM again.
 When escalation fires, `stage_2_tiebreaker` is populated and
 `final_verdict` comes from the tiebreaker, weighted by whichever small
 judge agreed with it.
+
+### Cross-family health contract
+
+The output includes a top-level `cross_family` object:
+
+```json
+{
+  "distinct_families_returned": 1,
+  "degraded": true,
+  "down_lanes": [
+    {
+      "family": "google",
+      "model": "Gemini 3.5 Flash (Low)",
+      "reason": "no JSON object in response"
+    }
+  ]
+}
+```
+
+`distinct_families_returned` counts distinct families that returned a real
+`pass`, `fail`, or `uncertain` verdict across every juror that ran
+(small-fish plus tiebreaker when fired). `down_lanes` lists every juror lane
+that errored, timed out, or returned empty/no-JSON output. `degraded` is true
+when fewer than two distinct families returned a real verdict.
+
+**Consumer contract:** gates MUST read `cross_family.degraded` as the
+authoritative machine-checkable signal. NEVER infer degradation from
+`all_flags[0]`; `all_flags` is for human skim and is not a positional API. A
+degraded cross-family T3 result should be surfaced clearly, e.g.
+`families: openai (google DOWN: no JSON object in response)`. The consumer
+decides policy per stakes, including whether that degraded result is WARN or
+BLOCK.
 
 ## Rubric slugs bundled with the skill
 

@@ -53,9 +53,9 @@ const VERSION = "3.4.0";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type Verdict = "pass" | "fail" | "uncertain" | "error" | "timeout";
+export type Verdict = "pass" | "fail" | "uncertain" | "error" | "timeout";
 
-interface JurorResult {
+export interface JurorResult {
   model: string;
   family: string;
   verdict: Verdict;
@@ -66,6 +66,18 @@ interface JurorResult {
   latency_ms: number;
   raw_response: string;
   error: string | null;
+}
+
+export interface CrossFamilyDownLane {
+  family: string;
+  model: string;
+  reason: string;
+}
+
+export interface CrossFamilyHealth {
+  distinct_families_returned: number;
+  degraded: boolean;
+  down_lanes: CrossFamilyDownLane[];
 }
 
 interface CascadeResult {
@@ -81,6 +93,7 @@ interface CascadeResult {
   };
   final_verdict: Verdict;
   final_confidence: number;
+  cross_family: CrossFamilyHealth;
   all_flags: string[];
   cost_usd_estimate: number;
   cost_vs_naive_parallel_jury_ratio: number | null;
@@ -981,9 +994,141 @@ interface AggregateResult {
   escalate: boolean;
 }
 
+interface FinalVerdictResult {
+  final_verdict: Verdict;
+  final_confidence: number;
+}
+
+const REAL_VERDICTS: Verdict[] = ["pass", "fail", "uncertain"];
+
+function returnedRealVerdict(juror: JurorResult): boolean {
+  return REAL_VERDICTS.includes(juror.verdict);
+}
+
+function laneDownReason(juror: JurorResult): string {
+  const error = juror.error?.trim();
+  if (error) return error;
+  const firstFlag = juror.flags[0]?.trim();
+  if (firstFlag) return firstFlag;
+  return "no verdict returned";
+}
+
+export function computeCrossFamily(jurors: JurorResult[]): CrossFamilyHealth {
+  const familiesReturned = new Set<string>();
+  const downLanes: CrossFamilyDownLane[] = [];
+
+  for (const juror of jurors) {
+    if (returnedRealVerdict(juror)) {
+      familiesReturned.add(juror.family);
+    }
+    if (!returnedRealVerdict(juror)) {
+      downLanes.push({
+        family: juror.family,
+        model: juror.model,
+        reason: laneDownReason(juror),
+      });
+    }
+  }
+
+  return {
+    distinct_families_returned: familiesReturned.size,
+    degraded: familiesReturned.size < 2,
+    down_lanes: downLanes,
+  };
+}
+
+function crossFamilyDegradedFlag(
+  crossFamily: CrossFamilyHealth,
+  jurors: JurorResult[],
+): string {
+  const familiesReturned = Array.from(
+    new Set(
+      jurors
+        .filter((juror) => returnedRealVerdict(juror))
+        .map((juror) => juror.family),
+    ),
+  );
+  const returnedSummary =
+    familiesReturned.length > 0 ? familiesReturned.join(", ") : "none";
+  const downSummary = crossFamily.down_lanes
+    .map((lane) => `${lane.family} (${lane.reason})`)
+    .join(", ");
+
+  if (crossFamily.distinct_families_returned === 0) {
+    const downDetails = downSummary ? ` (${downSummary})` : "";
+    return `⚠ CROSS-FAMILY DEGRADED: no lane returned a verdict${downDetails}`;
+  }
+
+  if (crossFamily.down_lanes.length > 0) {
+    return `⚠ CROSS-FAMILY DEGRADED: only ${returnedSummary} returned; ${downSummary} lane(s) down`;
+  }
+
+  return `⚠ CROSS-FAMILY DEGRADED: only ${returnedSummary} family returned a verdict (need ≥2 distinct families for cross-family)`;
+}
+
+export function appendCrossFamilyDegradationFlag(
+  allFlags: string[],
+  crossFamily: CrossFamilyHealth,
+  jurors: JurorResult[],
+): string[] {
+  if (!crossFamily.degraded) return allFlags;
+  return [...allFlags, crossFamilyDegradedFlag(crossFamily, jurors)];
+}
+
+export function computeFinalVerdict(
+  small: JurorResult[],
+  big: JurorResult | null,
+  escalate: boolean,
+): FinalVerdictResult {
+  if (!escalate) {
+    const finalVerdict = small[0]!.verdict;
+    const confs = small
+      .filter((j) => j.verdict === "pass" || j.verdict === "fail")
+      .map((j) => j.confidence);
+    const finalConfidence =
+      confs.length > 0
+        ? Math.floor(confs.reduce((a, b) => a + b, 0) / confs.length)
+        : 0;
+    return {
+      final_verdict: finalVerdict,
+      final_confidence: finalConfidence,
+    };
+  }
+
+  if (big && (big.verdict === "pass" || big.verdict === "fail")) {
+    const bigVerdict = big.verdict;
+    const aligned = small
+      .filter((j) => j.verdict === bigVerdict)
+      .map((j) => j.confidence);
+    if (aligned.length > 0) {
+      const avgAligned = aligned.reduce((a, b) => a + b, 0) / aligned.length;
+      return {
+        final_verdict: bigVerdict,
+        final_confidence: Math.floor((big.confidence + avgAligned) / 2),
+      };
+    }
+    return {
+      final_verdict: bigVerdict,
+      final_confidence: big.confidence,
+    };
+  }
+
+  if (big && big.verdict === "uncertain") {
+    return {
+      final_verdict: "uncertain",
+      final_confidence: big.confidence,
+    };
+  }
+
+  return {
+    final_verdict: "error",
+    final_confidence: 0,
+  };
+}
+
 function aggregate(small: JurorResult[]): AggregateResult {
   const verdicts = small
-    .filter((j) => ["pass", "fail", "uncertain"].includes(j.verdict))
+    .filter((j) => REAL_VERDICTS.includes(j.verdict))
     .map((j) => j.verdict);
 
   if (verdicts.length < 2) {
@@ -1068,48 +1213,28 @@ async function runCascade(
     big = await runTiebreaker(prompt, tb);
   }
 
-  // Final verdict
-  let finalVerdict: Verdict;
-  let finalConfidence: number;
-  if (!escalate) {
-    finalVerdict = small[0].verdict;
-    const confs = small
-      .filter((j) => j.verdict === "pass" || j.verdict === "fail")
-      .map((j) => j.confidence);
-    finalConfidence =
-      confs.length > 0
-        ? Math.floor(confs.reduce((a, b) => a + b, 0) / confs.length)
-        : 0;
-  } else if (big && (big.verdict === "pass" || big.verdict === "fail")) {
-    finalVerdict = big.verdict;
-    const aligned = small
-      .filter((j) => j.verdict === big!.verdict)
-      .map((j) => j.confidence);
-    if (aligned.length > 0) {
-      const avgAligned = aligned.reduce((a, b) => a + b, 0) / aligned.length;
-      finalConfidence = Math.floor((big.confidence + avgAligned) / 2);
-    } else {
-      finalConfidence = big.confidence;
-    }
-  } else if (big && big.verdict === "uncertain") {
-    finalVerdict = "uncertain";
-    finalConfidence = big.confidence;
-  } else {
-    finalVerdict = "error";
-    finalConfidence = 0;
-  }
+  const {
+    final_verdict: finalVerdict,
+    final_confidence: finalConfidence,
+  } = computeFinalVerdict(small, big, escalate);
 
   // Collect flags (dedup while preserving order)
-  const allFlags: string[] = [];
   const jurorsForFlags = big ? [...small, big] : [...small];
+  let allFlags: string[] = [];
   for (const j of jurorsForFlags) {
     for (const f of j.flags) {
       if (!allFlags.includes(f)) allFlags.push(f);
     }
   }
+  const crossFamily = computeCrossFamily(jurorsForFlags);
+  allFlags = appendCrossFamilyDegradationFlag(
+    allFlags,
+    crossFamily,
+    jurorsForFlags,
+  );
 
   // Cost estimate vs naive parallel jury (3× big-fish run on same artifact)
-  const jurorsFired = big ? [...small, big] : [...small];
+  const jurorsFired = jurorsForFlags;
   const costActual = estimateCost(jurorsFired);
   const naiveTokensIn = estimateTokens(prompt);
   const naiveTokensOut = 64;
@@ -1134,6 +1259,7 @@ async function runCascade(
     },
     final_verdict: finalVerdict,
     final_confidence: finalConfidence,
+    cross_family: crossFamily,
     all_flags: allFlags,
     cost_usd_estimate: costActual,
     cost_vs_naive_parallel_jury_ratio: ratio,
