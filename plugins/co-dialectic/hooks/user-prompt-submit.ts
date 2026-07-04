@@ -38,6 +38,11 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { evaluateSharedLiveness } from "./liveness.ts";
+import {
+  consumeCostNudgeForSession,
+  sessionIdFromInput,
+  type HookInput as CostNudgeHookInput,
+} from "./cost-routing-nudge.ts";
 
 interface CodiState {
   schema_version: string;
@@ -69,6 +74,11 @@ interface CodiState {
 
 type LoadedStateSource = "brain" | "legacy";
 type ReminderStateSource = LoadedStateSource | "missing";
+
+interface UserPromptSubmitInput {
+  session_id?: string;
+  sessionId?: string;
+}
 
 // ─── State loading ────────────────────────────────────────────────────────────
 
@@ -258,6 +268,27 @@ function emitSilent(): never {
   process.exit(0);
 }
 
+async function readHookInput(): Promise<UserPromptSubmitInput> {
+  try {
+    const raw = (await Bun.stdin.text()).trim();
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as UserPromptSubmitInput;
+  } catch {
+    return {};
+  }
+}
+
+export function appendCostRoutingNudge(additionalContext: string, nudge: string | null): string {
+  return nudge ? `${additionalContext}\n\n${nudge}` : additionalContext;
+}
+
+function costRoutingNudgeFromInput(input: UserPromptSubmitInput): string | null {
+  const sessionId = sessionIdFromInput(input as CostNudgeHookInput);
+  return sessionId ? consumeCostNudgeForSession(sessionId) : null;
+}
+
 // ─── Date/time ─────────────────────────────────────────────────────────────────
 
 function osGroundedDate(): string {
@@ -437,7 +468,8 @@ export function buildReminder(
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-function main(): void {
+async function main(): Promise<void> {
+  const hookInput = await readHookInput();
   const [loadedState, loadedSource] = loadState();
   const legacyState = loadLegacyState();
   if (loadedState?.active === false || legacyState?.active === false) {
@@ -454,9 +486,13 @@ function main(): void {
   const liveness = evaluateCodiLiveness(livenessState, installedVersion);
   const baseContext = buildReminder(state, source, { liveness });
   const degradationNudge = buildDegradationNudge(liveness);
-  const additionalContext = liveness.degraded
+  const survivalContext = liveness.degraded
     ? `${baseContext}\n\n${degradationNudge}`
     : baseContext;
+  const additionalContext = appendCostRoutingNudge(
+    survivalContext,
+    costRoutingNudgeFromInput(hookInput),
+  );
   const displayVersion = state.installed_version ?? state.version ?? installedVersion;
   const systemMessage = liveness.degraded
     ? degradationNudge
@@ -466,5 +502,7 @@ function main(): void {
 
 // Only run main when invoked directly (not when imported by tests).
 if (import.meta.main) {
-  main();
+  main().catch(() => {
+    process.exit(0);
+  });
 }

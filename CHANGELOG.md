@@ -6,6 +6,10 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.34.0] - 2026-07-04
+
+- Add XOS-199 never-blocking cost-routing love-nudge: Stop detector for whale-model fish-work, per-session escalation with a three-fire cap, delegation suppression, and next-prompt UserPromptSubmit injection so routing guidance reaches the model before the next turn.
+
 ## [4.33.0] - 2026-07-03
 
 - Fix false DEGRADED — grace-window the protocol-before-session rule so a fresh heartbeat is LIVE despite mid-session session_start re-stamps (XOS-197); stop mid-session last_session_start_ts re-stamp; unify statusline verdict; merge-not-clobber state writes.
