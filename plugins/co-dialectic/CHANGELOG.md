@@ -1,5 +1,9 @@
 # Changelog — Co-Dialectic
 
+## [4.35.0] — 2026-07-04 — XOS-207: loud cross-family degradation signal
+
+- judge_panel.ts emits a top-level `cross_family` health object (`distinct_families_returned`, `degraded`, `down_lanes[{family,model,reason}]`) computed over stage-1 + tiebreaker jurors. A judge lane that errors/times out/empties is no longer silently dropped: `degraded = distinct families with a real verdict < 2` (a different-family tiebreaker restores cross-family), and a loud `⚠ CROSS-FAMILY DEGRADED` line is appended to `all_flags` (preserving existing indices). Structured `cross_family.degraded` is authoritative; consumers read it, never all_flags[0]. Additive + backward-compatible; verdict math unchanged. Fixes the silent-single-family blind spot (agy Google lane down → gates ran OpenAI-only, undetected).
+
 ## [4.34.0] — 2026-07-04 — XOS-199: cost-routing love-nudge
 
 ### Added

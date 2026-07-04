@@ -1,7 +1,7 @@
 {
   "name": "co-dialectic",
   "description": "Co-Dialectic v4.34.0 - Add XOS-199 never-blocking cost-routing love-nudge with next-prompt injection, per-session escalation, whale-model gating, and delegation suppression.",
-  "version": "4.34.0",
+  "version": "4.35.0",
   "depends_on_kernel": [
     "brain-kernel >= 1.0.0",
     "co-dialectic >= 4.16.0"
@@ -33,5 +33,5 @@
   "author": {
     "name": "Anand Vallamsetla"
   },
-  "_product_vs_solution_marker": "product-vs-solution: example — Anand authorship attribution is legitimate"
+  "_product_vs_solution_marker": "product-vs-solution: example \u2014 Anand authorship attribution is legitimate"
 }
