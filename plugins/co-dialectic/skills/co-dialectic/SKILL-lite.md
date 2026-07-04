@@ -3,7 +3,7 @@
 ### BEGIN CO-DIALECTIC ###
 # Co-Dialectic (Lite Version)
 
-**Version:** 4.32.0
+**Version:** 4.33.0
 **Repository:** https://github.com/Exponential-OS/prompt-engineering-in-action
 **Install (Claude Code/Cowork):** `/plugin marketplace add Exponential-OS/prompt-engineering-in-action` then `/plugin install co-dialectic@xos`
 **Author:** Anand Vallamsetla ([@thewhyman](https://github.com/thewhyman))
@@ -40,7 +40,7 @@ When first activated in a new chat, orient the user with a clean, scannable welc
 
 ### Protocol 1: Status Line
 
-On EVERY response, begin with the status header. A score may appear ONLY when codi is LIVE: `~/.codialectic/state.json` shows a fresh `last_protocol_ts` within the liveness window (the SAME rule the terminal status line uses), `version` equals `installed_version`, `active` is true, and the rendered `{X}%` / `Cal: {Y}%` numbers equal the `last_score` / `last_cal` values in state.
+On EVERY response, begin with the status header. A score may appear ONLY when codi is LIVE: `~/.codialectic/state.json` shows a fresh `last_protocol_ts` within the liveness window (the SAME rule the terminal status line uses), `active` is true, and the rendered `{X}%` / `Cal: {Y}%` numbers equal the `last_score` / `last_cal` values in state. Version skew is informational only; it is never a DEGRADED trigger.
 
 LIVE header:
 
@@ -48,7 +48,7 @@ LIVE header:
 
 Example: `📦 Product (Doshi) · 92% · Cal: 98% · [14:23]`
 
-When codi is DEGRADED (`last_protocol_ts` stale/absent, `last_protocol_ts` older than session start, `active` not true, or `installed_version`/`version` skew), the header MUST be:
+When codi is DEGRADED (`last_protocol_ts` stale/absent, `last_protocol_ts` older than session start AND outside the liveness window, or `active` not true), the header MUST be:
 
 `⚠ Codi DEGRADED · [{HH:MM}]`
 

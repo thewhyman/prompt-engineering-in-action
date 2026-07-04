@@ -10,6 +10,11 @@
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import {
+  evaluateSharedLiveness,
+  staleSecsFromEnv,
+  stringOr,
+} from "./liveness.ts";
 
 interface HookInput {
   transcript_path?: string;
@@ -54,7 +59,6 @@ export interface StatusLivenessCheck {
   scorePermitted: boolean;
 }
 
-const DEFAULT_STALE_SECS = 900;
 const HEADER_TIME_PATTERN = String.raw`(?:\d{2}:\d{2}|\d{2}-\d{2} \d{2}:\d{2})`;
 const OPTIONAL_HEADER_TIME_PATTERN = String.raw`(?: · \[${HEADER_TIME_PATTERN}\])?`;
 const ICON_PERSONA_LEAD_PATTERN = String.raw`(?=[^\x00-\x7F])(?:\p{Extended_Pictographic}|\p{S})[^·%\n]{0,119}`;
@@ -78,33 +82,12 @@ function homeDir(): string {
 }
 
 export function authoritativeStatePath(): string {
-  // Keep this path identical to statusline.sh. The brain-kernel path may be
-  // written for cross-device continuity, but terminal statusLine liveness is
-  // authoritative for XOS-141/XOS-146 parity and reads only this file.
+  // Keep this resolution identical to statusline.sh and user-prompt-submit.ts:
+  // brain-kernel workspace first, then legacy machine-local state.
+  const root = process.env.BRAIN_WORKSPACE_ROOT ?? process.env.CAREER_HOME ?? process.cwd();
+  const brainPath = join(root, "co-dialectic", "status-state.json");
+  if (existsSync(brainPath)) return brainPath;
   return join(homeDir(), ".codialectic", "state.json");
-}
-
-function staleSecsFromEnv(): number {
-  const parsed = Number(process.env.CODI_STALE_SECS ?? String(DEFAULT_STALE_SECS));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_STALE_SECS;
-}
-
-function stringOr(value: unknown, fallback: string): string {
-  if (typeof value === "string" && value.length > 0) return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  return fallback;
-}
-
-function isoToEpochSeconds(value: unknown): number {
-  if (typeof value !== "string") return 0;
-  const trimmed = value.trim();
-  if (trimmed.length === 0 || trimmed === "_" || trimmed === "null") return 0;
-  const ms = Date.parse(trimmed);
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
-}
-
-function isActive(value: unknown): boolean {
-  return value === true || value === "true" || value === "True";
 }
 
 export function evaluateStatusFreshness(
@@ -113,33 +96,20 @@ export function evaluateStatusFreshness(
   staleSecs: number = staleSecsFromEnv(),
 ): StatusFreshness {
   const installedVersion = stringOr(state?.installed_version, "unknown");
-  const stateVersion = stringOr(state?.version, "");
-  const nowEpoch = Math.floor(now.getTime() / 1000);
-  const protocolEpoch = isoToEpochSeconds(state?.last_protocol_ts);
-  const sessionEpoch = isoToEpochSeconds(state?.last_session_start_ts);
-
-  let stale = false;
-  if (protocolEpoch <= 0) {
-    stale = true;
-  } else if (sessionEpoch > 0 && protocolEpoch < sessionEpoch) {
-    stale = true;
-  } else if (nowEpoch - protocolEpoch > staleSecs) {
-    stale = true;
-  }
-
-  // XOS-149: version mismatch is INFORMATIONAL only — not a DEGRADED/score-block trigger.
-  // `version` (model-written) vs `installed_version` (hook-written) are decoupled sources
-  // that disagree under cache-sprawl / 'unknown' detection → permanent false DEGRADED.
-  const skew = stateVersion !== "" && stateVersion !== installedVersion;
-  const inactive = !isActive(state?.active);
-  const degraded = stale || inactive;
+  const liveness = evaluateSharedLiveness(
+    state,
+    installedVersion,
+    now,
+    staleSecs,
+    "boolean-or-string",
+  );
 
   return {
-    live: !degraded,
-    degraded,
-    stale,
-    skew,
-    inactive,
+    live: liveness.live,
+    degraded: liveness.degraded,
+    stale: liveness.stale,
+    skew: liveness.skew,
+    inactive: liveness.inactive,
     installedVersion,
   };
 }
@@ -180,7 +150,7 @@ export function parseRenderedHeader(message: string): RenderedHeader {
 function buildNudge(reason: NonNullable<StatusLivenessCheck["reason"]>): string {
   if (reason === "fabrication") {
     return [
-      "⚠ CODI STATUS FABRICATION — the response showed a score while codi is DEGRADED (stale/absent heartbeat, version skew, or inactive).",
+      "⚠ CODI STATUS FABRICATION — the response showed a score while codi is DEGRADED (stale/absent heartbeat or inactive).",
       "Unless codi is LIVE (a fresh heartbeat within the liveness window — the same rule the terminal status line uses), render `⚠ Codi DEGRADED` with no score, never invented numbers.",
     ].join("\n");
   }

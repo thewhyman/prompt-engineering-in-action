@@ -72,9 +72,12 @@ function transcriptWithAssistant(message: string): string {
 
 function runStatuslineVerdict(home: string): "LIVE" | "DEGRADED" {
   const proc = Bun.spawnSync(["bash", STATUSLINE], {
+    cwd: home,
     env: {
       ...process.env,
       HOME: home,
+      BRAIN_WORKSPACE_ROOT: join(home, "workspace"),
+      CAREER_HOME: "",
       CODI_STALE_SECS: "900",
     },
     stdout: "pipe",
@@ -87,9 +90,12 @@ function runStatuslineVerdict(home: string): "LIVE" | "DEGRADED" {
 
 function runHook(home: string, transcriptPath: string): { exitCode: number; stdout: string } {
   const proc = spawnSync(process.execPath, [STATUS_LIVENESS_CHECK], {
+    cwd: home,
     env: {
       ...process.env,
       HOME: home,
+      BRAIN_WORKSPACE_ROOT: join(home, "workspace"),
+      CAREER_HOME: "",
       CODI_STALE_SECS: "900",
     },
     input: JSON.stringify({ transcript_path: transcriptPath }),
@@ -438,6 +444,14 @@ describe("freshness predicate parity with statusline.sh", () => {
       }),
       NOW,
       900,
+    ).live).toBe(true);
+    expect(evaluateStatusFreshness(
+      baseState({
+        last_session_start_ts: "2026-06-29T12:00:00Z",
+        last_protocol_ts: "2026-06-29T11:44:59Z",
+      }),
+      NOW,
+      900,
     ).degraded).toBe(true);
   });
 
@@ -465,6 +479,10 @@ describe("freshness predicate parity with statusline.sh", () => {
       baseState({
         last_session_start_ts: isoSeconds(new Date(now.getTime() - 60 * 1000)),
         last_protocol_ts: isoSeconds(new Date(now.getTime() - 120 * 1000)),
+      }),
+      baseState({
+        last_session_start_ts: isoSeconds(new Date(now.getTime() - 60 * 1000)),
+        last_protocol_ts: isoSeconds(new Date(now.getTime() - 20 * 60 * 1000)),
       }),
     ];
 

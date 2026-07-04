@@ -1,11 +1,16 @@
 # Changelog — Co-Dialectic
 
+## [4.33.0] — 2026-07-03 — XOS-197: false DEGRADED liveness fix
+
+### Fixed
+- Fix false DEGRADED — grace-window the protocol-before-session rule so a fresh heartbeat is LIVE despite mid-session session_start re-stamps (XOS-197); stop mid-session last_session_start_ts re-stamp; unify statusline verdict; merge-not-clobber state writes.
+
 ## [4.26.0] — 2026-06-29 — XOS-141: structural liveness
 
 ### Fixed — false liveness from stale model-owned state
 - Split `~/.codialectic/state.json` into hook-owned fields (`installed_version`, `last_session_start_ts`) and model-owned fields (`last_protocol_ts`, scores, persona/mode, active flags).
 - `install-survival-layer.sh` now syncs hook-owned fields on every SessionStart without clobbering model-owned fields, keeps the resident status line fresh, and warns in `install.log` when multiple cached co-dialectic versions are detected.
-- `statusline.sh` now fails loud as `⚠ Codi DEGRADED` when the model heartbeat is missing, older than session start, older than `CODI_STALE_SECS`, version-skewed, or inactive. It never renders stale score/cal fields as live.
+- `statusline.sh` now fails loud as `⚠ Codi DEGRADED` when the model heartbeat is missing, older than session start, older than `CODI_STALE_SECS`, or inactive. It never renders stale score/cal fields as live.
 - `user-prompt-submit.ts` now appends a deterministic Protocol 0/1 re-activation nudge on stale/skew/inactive local state without writing `last_protocol_ts` from the hook.
 - Protocol 1 now requires the model to update `last_protocol_ts` when rendering the status line, making protocol execution structurally observable.
 

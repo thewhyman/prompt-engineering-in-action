@@ -3,8 +3,9 @@
 #
 # Idempotent. Runs on every SessionStart. Five responsibilities:
 #   1. Create or sync ~/.codialectic/state.json:
-#        - hook-owned fields refreshed every session:
-#          installed_version, last_session_start_ts
+#        - hook-owned fields merged without clobbering model-owned state:
+#          installed_version refreshes; last_session_start_ts is initialized only
+#          when no prior session marker/heartbeat exists
 #        - model-owned fields preserved:
 #          last_protocol_ts, last_score, last_cal, persona, mode, honesty,
 #          wildcard, active
@@ -104,6 +105,7 @@ sync_state_json() {
   if command -v python3 >/dev/null 2>&1; then
     STATE_FILE="${STATE_FILE}" INSTALL_LOG="${INSTALL_LOG}" CODI_VERSION="${CODI_VERSION}" NOW="${NOW}" python3 - <<'PYEOF'
 import datetime
+import fcntl
 import json
 import os
 import shutil
@@ -115,7 +117,7 @@ state_path = Path(os.environ["STATE_FILE"])
 install_log = Path(os.environ["INSTALL_LOG"])
 version = os.environ["CODI_VERSION"]
 now = os.environ["NOW"]
-created = not state_path.exists()
+created = False
 recreated = False
 
 defaults = {
@@ -134,6 +136,9 @@ defaults = {
     "growth_total_turns": 0,
     "last_updated_ts": now,
 }
+
+def usable_marker(value):
+    return isinstance(value, str) and value.strip() not in ("", "_", "null")
 
 def backup_corrupt_state():
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -154,35 +159,54 @@ def backup_corrupt_state():
     print(f"[install-survival-layer] {warning}", file=sys.stderr)
     return {}
 
-if state_path.exists():
-    try:
-        with state_path.open() as f:
-            loaded_state = json.load(f)
-    except Exception:
-        state = backup_corrupt_state()
-        recreated = True
-    else:
-        if isinstance(loaded_state, dict):
-            state = loaded_state
-        else:
+state_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path = state_path.with_name(f"{state_path.name}.lock")
+with lock_path.open("a+") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    created = not state_path.exists()
+
+    if state_path.exists():
+        try:
+            with state_path.open() as f:
+                loaded_state = json.load(f)
+        except Exception:
             state = backup_corrupt_state()
             recreated = True
-else:
-    state = {}
+        else:
+            if isinstance(loaded_state, dict):
+                state = loaded_state
+            else:
+                state = backup_corrupt_state()
+                recreated = True
+    else:
+        state = {}
 
-for key, value in defaults.items():
-    state.setdefault(key, value)
+    for key, value in defaults.items():
+        state.setdefault(key, value)
 
-# XOS-141 hook-owned fields: refresh every SessionStart.
-state["installed_version"] = version
-state["last_session_start_ts"] = now
+    # Hook-owned installed_version may refresh on SessionStart. The session
+    # marker must not: reload/login/plugin re-init can fire SessionStart in the
+    # middle of a live conversation. Preserve any existing marker, and if an
+    # older state has a heartbeat but no marker, leave the heartbeat un-leapfrogged.
+    state["installed_version"] = version
+    if not usable_marker(state.get("last_session_start_ts")) and not usable_marker(state.get("last_protocol_ts")):
+        state["last_session_start_ts"] = now
 
-state_path.parent.mkdir(parents=True, exist_ok=True)
-with tempfile.NamedTemporaryFile("w", dir=state_path.parent, delete=False) as tmp:
-    json.dump(state, tmp, indent=2)
-    tmp.write("\n")
-    tmp_name = tmp.name
-os.replace(tmp_name, state_path)
+    with tempfile.NamedTemporaryFile("w", dir=state_path.parent, delete=False) as tmp:
+        json.dump(state, tmp, indent=2)
+        tmp.write("\n")
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        tmp_name = tmp.name
+    os.replace(tmp_name, state_path)
+    try:
+        dir_fd = os.open(state_path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except Exception:
+        pass
 
 verb = "Created" if created else "Recreated" if recreated else "Synced"
 print(f"[install-survival-layer] {verb} {state_path} (installed_version {version})", file=sys.stderr)
@@ -191,54 +215,78 @@ PYEOF
   fi
 
   if command -v jq >/dev/null 2>&1; then
-    CREATED=false
-    RECREATED=false
-    if [ ! -f "${STATE_FILE}" ]; then
-      CREATED=true
-      printf '{}\n' > "${STATE_FILE}"
-    elif ! jq -e 'type == "object"' "${STATE_FILE}" >/dev/null 2>&1; then
-      backup_corrupt_state_json
-      RECREATED=true
-      printf '{}\n' > "${STATE_FILE}"
-    fi
-    TMP_FILE=$(mktemp "${STATE_FILE}.XXXXXX")
-    if jq --arg version "${CODI_VERSION}" --arg now "${NOW}" '
-      (if type == "object" then . else {} end)
-      | .schema_version = (.schema_version // "1.0.0")
-      | .active = (if has("active") then .active else true end)
-      | .mode = (.mode // "drive")
-      | .honesty = (.honesty // "grounded")
-      | .persona = (if has("persona") then .persona else null end)
-      | .persona_icon = (if has("persona_icon") then .persona_icon else null end)
-      | .last_score = (if has("last_score") then .last_score else null end)
-      | .last_cal = (if has("last_cal") then .last_cal else null end)
-      | .wildcard = (if has("wildcard") then .wildcard else false end)
-      | .last_protocol_ts = (if has("last_protocol_ts") then .last_protocol_ts else null end)
-      | .session_start_ts = (.session_start_ts // $now)
-      | .version = (.version // $version)
-      | .growth_total_turns = (.growth_total_turns // 0)
-      | .last_updated_ts = (.last_updated_ts // $now)
-      | .installed_version = $version
-      | .last_session_start_ts = $now
-    ' "${STATE_FILE}" > "${TMP_FILE}"; then
-      mv "${TMP_FILE}" "${STATE_FILE}"
-      if [ "${CREATED}" = "true" ]; then
-        echo "[install-survival-layer] Created ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
-      elif [ "${RECREATED}" = "true" ]; then
-        echo "[install-survival-layer] Recreated ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
-      else
-        echo "[install-survival-layer] Synced ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+    (
+      if command -v flock >/dev/null 2>&1; then
+        flock 9
       fi
-    else
-      rm -f "${TMP_FILE}"
-      echo "[install-survival-layer] WARN: cannot parse ${STATE_FILE}; hook-owned state sync skipped" >&2
-      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARN: cannot parse ${STATE_FILE}; hook-owned state sync skipped" >> "${INSTALL_LOG}" 2>/dev/null || true
-    fi
+      CREATED=false
+      RECREATED=false
+      SOURCE_FILE="${STATE_FILE}"
+      CLEANUP_SOURCE=""
+      if [ ! -f "${STATE_FILE}" ]; then
+        CREATED=true
+        SOURCE_FILE=$(mktemp "${STATE_FILE}.input.XXXXXX")
+        CLEANUP_SOURCE="${SOURCE_FILE}"
+        printf '{}\n' > "${SOURCE_FILE}"
+      elif ! jq -e 'type == "object"' "${STATE_FILE}" >/dev/null 2>&1; then
+        backup_corrupt_state_json
+        RECREATED=true
+        SOURCE_FILE=$(mktemp "${STATE_FILE}.input.XXXXXX")
+        CLEANUP_SOURCE="${SOURCE_FILE}"
+        printf '{}\n' > "${SOURCE_FILE}"
+      fi
+      TMP_FILE=$(mktemp "${STATE_FILE}.XXXXXX")
+      if jq --arg version "${CODI_VERSION}" --arg now "${NOW}" '
+        def usable_marker:
+          if type == "string" then
+            (gsub("^\\s+|\\s+$"; "") | . != "" and . != "_" and . != "null")
+          else
+            false
+          end;
+        (if type == "object" then . else {} end)
+        | .schema_version = (.schema_version // "1.0.0")
+        | .active = (if has("active") then .active else true end)
+        | .mode = (.mode // "drive")
+        | .honesty = (.honesty // "grounded")
+        | .persona = (if has("persona") then .persona else null end)
+        | .persona_icon = (if has("persona_icon") then .persona_icon else null end)
+        | .last_score = (if has("last_score") then .last_score else null end)
+        | .last_cal = (if has("last_cal") then .last_cal else null end)
+        | .wildcard = (if has("wildcard") then .wildcard else false end)
+        | .last_protocol_ts = (if has("last_protocol_ts") then .last_protocol_ts else null end)
+        | .session_start_ts = (.session_start_ts // $now)
+        | .version = (.version // $version)
+        | .growth_total_turns = (.growth_total_turns // 0)
+        | .last_updated_ts = (.last_updated_ts // $now)
+        | .installed_version = $version
+        | if ((.last_session_start_ts | usable_marker) or (.last_protocol_ts | usable_marker)) then . else .last_session_start_ts = $now end
+      ' "${SOURCE_FILE}" > "${TMP_FILE}"; then
+        mv "${TMP_FILE}" "${STATE_FILE}"
+        rm -f "${CLEANUP_SOURCE}"
+        if [ "${CREATED}" = "true" ]; then
+          echo "[install-survival-layer] Created ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+        elif [ "${RECREATED}" = "true" ]; then
+          echo "[install-survival-layer] Recreated ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+        else
+          echo "[install-survival-layer] Synced ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+        fi
+      else
+        rm -f "${TMP_FILE}" "${CLEANUP_SOURCE}"
+        echo "[install-survival-layer] WARN: cannot parse ${STATE_FILE}; hook-owned state sync skipped" >&2
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARN: cannot parse ${STATE_FILE}; hook-owned state sync skipped" >> "${INSTALL_LOG}" 2>/dev/null || true
+      fi
+    ) 9>"${STATE_FILE}.lock"
     return
   fi
 
   if [ ! -f "${STATE_FILE}" ]; then
-    cat > "${STATE_FILE}" <<EOF
+    (
+      if command -v flock >/dev/null 2>&1; then
+        flock 9
+      fi
+      if [ ! -f "${STATE_FILE}" ]; then
+        TMP_FILE=$(mktemp "${STATE_FILE}.XXXXXX")
+        cat > "${TMP_FILE}" <<EOF
 {
   "schema_version": "1.0.0",
   "active": true,
@@ -258,7 +306,10 @@ PYEOF
   "last_updated_ts": "${NOW}"
 }
 EOF
-    echo "[install-survival-layer] Created ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+        mv "${TMP_FILE}" "${STATE_FILE}"
+        echo "[install-survival-layer] Created ${STATE_FILE} (installed_version ${CODI_VERSION})" >&2
+      fi
+    ) 9>"${STATE_FILE}.lock"
   else
     echo "[install-survival-layer] WARN: jq/python3 missing; hook-owned state sync skipped" >&2
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARN: jq/python3 missing; hook-owned state sync skipped" >> "${INSTALL_LOG}" 2>/dev/null || true

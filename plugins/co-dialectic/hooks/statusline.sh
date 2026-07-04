@@ -148,9 +148,20 @@ PROTOCOL_EPOCH=$(iso_to_epoch "$LAST_PROTOCOL_TS")
 STALE=false
 if [ "$PROTOCOL_EPOCH" -le 0 ]; then
   STALE=true
-elif [ "$SESSION_EPOCH" -gt 0 ] && [ "$PROTOCOL_EPOCH" -lt "$SESSION_EPOCH" ]; then
+else
+  PROTOCOL_AGE=$((NOW_EPOCH - PROTOCOL_EPOCH))
+fi
+
+# Keep this predicate in sync with hooks/liveness.ts. XOS-197: a fresh
+# heartbeat is LIVE even if a reload/login SessionStart re-stamped
+# last_session_start_ts after that heartbeat. protocol-before-session is stale
+# only when the heartbeat is also older than the stale window.
+if [ "$STALE" = "false" ] && \
+   [ "$SESSION_EPOCH" -gt 0 ] && \
+   [ "$PROTOCOL_EPOCH" -lt "$SESSION_EPOCH" ] && \
+   [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
   STALE=true
-elif [ $((NOW_EPOCH - PROTOCOL_EPOCH)) -gt "$STALE_SECS" ]; then
+elif [ "$STALE" = "false" ] && [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
   STALE=true
 fi
 
