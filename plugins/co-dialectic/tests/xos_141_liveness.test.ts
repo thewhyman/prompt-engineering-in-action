@@ -78,9 +78,12 @@ function baseState(overrides: Record<string, unknown> = {}): Record<string, unkn
 
 function runStatusline(home: string): string {
   const proc = Bun.spawnSync(["bash", STATUSLINE], {
+    cwd: home,
     env: {
       ...process.env,
       HOME: home,
+      BRAIN_WORKSPACE_ROOT: join(home, "workspace"),
+      CAREER_HOME: "",
       CODI_STALE_SECS: "900",
     },
     stdout: "pipe",
@@ -189,7 +192,7 @@ describe("statusline freshness gate (XOS-141)", () => {
     expect(runStatusline(home)).toContain("⚠ Codi DEGRADED");
   });
 
-  test("last_protocol_ts older than last_session_start_ts renders DEGRADED", () => {
+  test("fresh last_protocol_ts before last_session_start_ts remains healthy (XOS-197)", () => {
     const home = makeTempDir("codi-xos-141-home-");
     const now = Date.now();
     writeState(
@@ -197,6 +200,20 @@ describe("statusline freshness gate (XOS-141)", () => {
       baseState({
         last_session_start_ts: isoSeconds(new Date(now - 10_000)),
         last_protocol_ts: isoSeconds(new Date(now - 20_000)),
+      }),
+    );
+
+    expect(runStatusline(home)).not.toContain("⚠ Codi DEGRADED");
+  });
+
+  test("stale last_protocol_ts before last_session_start_ts renders DEGRADED", () => {
+    const home = makeTempDir("codi-xos-141-home-");
+    const now = Date.now();
+    writeState(
+      home,
+      baseState({
+        last_session_start_ts: isoSeconds(new Date(now - 60_000)),
+        last_protocol_ts: isoSeconds(new Date(now - 1_000_000)),
       }),
     );
 
@@ -234,7 +251,7 @@ describe("install-survival-layer state sync (XOS-141)", () => {
 
     const state = JSON.parse(readFileSync(join(home, ".codialectic", "state.json"), "utf8"));
     expect(state.installed_version).toBe("9.9.9");
-    expect(state.last_session_start_ts).not.toBe("2026-05-23T00:00:00Z");
+    expect(state.last_session_start_ts).toBe("2026-05-23T00:00:00Z");
     expect(state.last_score).toBe(77);
     expect(state.version).toBe("4.25.0");
     expect(existsSync(join(home, ".codialectic", "statusline.sh"))).toBe(true);

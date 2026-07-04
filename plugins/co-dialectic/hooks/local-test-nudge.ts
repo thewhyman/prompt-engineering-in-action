@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * local-test-nudge.ts — Co-Dialectic v4.32.0 Stop hook harness.
+ * local-test-nudge.ts — Co-Dialectic v4.33.0 Stop hook harness.
  *
  * Detects the false-blocker / skipped-verification pattern where the final
  * assistant message says local testing is impossible because auth/access/env is

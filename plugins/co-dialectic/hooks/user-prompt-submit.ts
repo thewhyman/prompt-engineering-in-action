@@ -17,10 +17,8 @@
  * to the brain path (not the legacy path) after each response.
  *
  * SPEC-CLARIFICATION-NEEDED (migration period):
- *   - The statusline.sh still reads ~/.codialectic/state.json directly (hasn't
- *     been updated yet). During the migration period (v4.17.0) both paths may
- *     diverge if the statusline.sh updates lag behind. The brain path is
- *     authoritative; statusline.sh will be updated in a follow-up.
+ *   - statusline.sh uses the same brain-first, legacy-fallback state order as
+ *     this hook so one heartbeat drives both visible surfaces.
  *   - If BRAIN_WORKSPACE_ROOT is not set and cwd is not a workspace, the
  *     brain read will return null. The fallback to ~/.codialectic/state.json
  *     ensures the hook never silently disables codi.
@@ -39,6 +37,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { evaluateSharedLiveness } from "./liveness.ts";
 
 interface CodiState {
   schema_version: string;
@@ -155,12 +154,6 @@ export interface CodiLiveness {
   reasons: string[];
 }
 
-function parseIsoMillis(value: unknown): number | null {
-  if (typeof value !== "string" || value.trim().length === 0) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
-}
-
 export function resolveInstalledVersion(state?: Partial<CodiState> | null): string {
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
   if (pluginRoot) {
@@ -185,43 +178,21 @@ export function evaluateCodiLiveness(
   now: Date = new Date(),
   staleSecs: number = Number(process.env.CODI_STALE_SECS ?? "900"),
 ): CodiLiveness {
-  const reasons: string[] = [];
-  const safeStaleSecs = Number.isFinite(staleSecs) && staleSecs >= 0 ? staleSecs : 900;
-  const nowMs = now.getTime();
-  const protocolMs = parseIsoMillis(state?.last_protocol_ts);
-  const sessionMs = parseIsoMillis(state?.last_session_start_ts);
-
-  let stale = false;
-  if (protocolMs === null) {
-    stale = true;
-    reasons.push("missing-last_protocol_ts");
-  } else if (sessionMs !== null && protocolMs < sessionMs) {
-    stale = true;
-    reasons.push("protocol-before-session");
-  } else if (nowMs - protocolMs > safeStaleSecs * 1000) {
-    stale = true;
-    reasons.push("protocol-too-old");
-  }
-
-  // XOS-149: version mismatch is INFORMATIONAL ONLY — never a DEGRADED trigger.
-  // `version` (model-written, from the reminder's claimed value) and installedVersion
-  // (hook-derived) are decoupled sources that disagree under cache-sprawl / 'unknown'
-  // detection, producing PERMANENT false DEGRADED regardless of heartbeat freshness
-  // (reproduced 2026-06-29). DEGRADED must mean real liveness loss: stale protocol or
-  // inactive. Genuine stale-version detection belongs to the publish/skew gate, not here.
-  const stateAcknowledgedVersion = state?.version ?? "";
-  const skew = stateAcknowledgedVersion !== "" && stateAcknowledgedVersion !== installedVersion;
-
-  const inactive = state?.active !== true;
-  if (inactive) reasons.push("inactive");
+  const result = evaluateSharedLiveness(
+    state,
+    installedVersion,
+    now,
+    staleSecs,
+    "boolean-only",
+  );
 
   return {
-    degraded: stale || inactive,
-    stale,
-    skew,
-    inactive,
+    degraded: result.degraded,
+    stale: result.stale,
+    skew: result.skew,
+    inactive: result.inactive,
     installedVersion,
-    reasons,
+    reasons: result.reasons,
   };
 }
 
@@ -479,7 +450,7 @@ function main(): void {
   const installedVersion = resolveInstalledVersion(legacyState ?? loadedState);
   const state = loadedState ?? buildDefaultState(installedVersion);
   const source: ReminderStateSource = loadedSource ?? "missing";
-  const livenessState = legacyState ?? loadedState;
+  const livenessState = loadedState;
   const liveness = evaluateCodiLiveness(livenessState, installedVersion);
   const baseContext = buildReminder(state, source, { liveness });
   const degradationNudge = buildDegradationNudge(liveness);

@@ -6,6 +6,10 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.33.0] - 2026-07-03
+
+- Fix false DEGRADED — grace-window the protocol-before-session rule so a fresh heartbeat is LIVE despite mid-session session_start re-stamps (XOS-197); stop mid-session last_session_start_ts re-stamp; unify statusline verdict; merge-not-clobber state writes.
+
 ## [4.32.0] - 2026-07-03
 
 - Local-test / verify-access love-nudge (XOS-195 Slice A) — fail-open Stop-hook that catches 'can't test locally / no auth' responses lacking local-test evidence and reframes toward checking env + testing locally. Fires in every session.

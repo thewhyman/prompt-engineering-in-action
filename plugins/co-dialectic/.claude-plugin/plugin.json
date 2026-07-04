@@ -1,7 +1,7 @@
 {
   "name": "co-dialectic",
-  "description": "Co-Dialectic v4.32.0 - XOS-195 Slice A local-test / verify-access love-nudge. Adds a fail-open Stop-hook that catches 'can't test locally / no auth' responses without local-test evidence and reframes toward checking env + testing locally.",
-  "version": "4.32.0",
+  "description": "Co-Dialectic v4.33.0 - Fix false DEGRADED liveness by grace-windowing protocol-before-session, preserving session markers on reload, unifying statusline verdicts, and merge-preserving state writes.",
+  "version": "4.33.0",
   "depends_on_kernel": [
     "brain-kernel >= 1.0.0",
     "co-dialectic >= 4.16.0"
