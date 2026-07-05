@@ -1,5 +1,11 @@
 # Changelog — Co-Dialectic
 
+## [4.37.0] — 2026-07-04 — XOS-198: deterministic Protocol-1 heartbeat
+
+- `status-liveness-check.ts` now stamps the Protocol-1 heartbeat deterministically after it verifies a valid final-assistant status header in the transcript. The Stop hook writes `last_protocol_ts`, parsed score/Cal/persona fields, runtime `version`, and increments `growth_total_turns`, preserving command-owned preferences (`mode`, `verbosity`, `wildcard`, `active`) via read-modify-write.
+- Brain-kernel `co-dialectic/status-state.json` is the authoritative write target when present; legacy `~/.codialectic/state.json` is a best-effort mirror. Writes use temp-file + rename and fail open independently.
+- Removed model-facing heartbeat/counter write instructions from the survival reminder and Protocol 1 skill text. The model still renders the header and only persists command-driven preference changes.
+
 ## [4.36.0] — 2026-07-04 — XOS-210 (codi half): Protocol 8 surfaces cross_family.degraded
 
 - Protocol 8 auto-verify now reads the judge JSON authoritative `cross_family.degraded` field (from co-dialectic ≥4.35.0 / XOS-207). A T3 auto-verify that ran on <2 distinct families no longer renders the clean `🟢 2 independent models agreed` line — it surfaces a loud `⚠ CROSS-FAMILY DEGRADED — <family> lane down; T3 ran single-family` instead. Turns the silent single-family blind spot (down agy lane → T3 gate ran OpenAI-only, undetected) into a user-visible signal. Read cross_family.degraded, never all_flags[0]. Backward-compatible (no field → omit line). Prose-only Protocol-8 instruction change; companion to XOS-210 super-developer receipt half.

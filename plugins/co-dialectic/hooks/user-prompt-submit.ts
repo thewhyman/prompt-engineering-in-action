@@ -13,8 +13,8 @@
  * bootstrapped), falls back to the legacy machine-local file.
  *
  * After each successful read of the brain path, the in-memory state is the
- * authoritative source. The survival reminder instructs Claude to write back
- * to the brain path (not the legacy path) after each response.
+ * authoritative source. Per-turn heartbeat fields are stamped by the Stop hook;
+ * the model only persists command-driven preference changes.
  *
  * SPEC-CLARIFICATION-NEEDED (migration period):
  *   - statusline.sh uses the same brain-first, legacy-fallback state order as
@@ -208,12 +208,12 @@ export function evaluateCodiLiveness(
 
 export function buildDegradationNudge(liveness: CodiLiveness): string {
   const inactiveInstruction = liveness.inactive
-    ? " If active is missing/null, restore active=true; if active=false, respect explicit user-off and tell the user to type 'codi on'."
+    ? " If codi was explicitly turned off, tell the user to type 'codi on'."
     : "";
   return (
     "⚠ CODI DEGRADED — re-fire Protocol 0/1 NOW: " +
-    "render the status line + set ~/.codialectic/state.json last_protocol_ts " +
-    "to current ISO time (and last_score/last_cal/persona/mode)." +
+    "render the required status header; the Stop hook will stamp the heartbeat " +
+    "after verifying the transcript." +
     inactiveInstruction
   );
 }
@@ -402,17 +402,15 @@ export function buildReminder(
 
   const nowLine = `Now (OS-grounded, do NOT recall from memory): ${osGroundedDate()}`;
 
-  // Tell Claude which path to write state back to after the response.
+  // The Stop hook owns per-turn heartbeat/counter writes. The model only persists
+  // command-driven preference changes so routine turns have a single writer.
   const workspaceRoot = resolveWorkspaceRoot();
   const brainStatePath = join(workspaceRoot, "co-dialectic/status-state.json");
-  const writeBackInstruction = stateSource === "brain"
-    ? `After your response, write back to the brain-kernel path: ${brainStatePath}`
-    : stateSource === "legacy"
-      ? `After your response, write to the brain-kernel path: ${brainStatePath} ` +
-        `(NOTE: state was loaded from legacy ~/.codialectic/state.json — brain path not yet initialized; ` +
-        `writing to brain path will complete the migration)`
-      : `No codi state file was loaded. After your response, initialize the brain-kernel path: ${brainStatePath} ` +
-        `and ~/.codialectic/state.json with active=true, last_protocol_ts=current ISO time, and version=${displayVersion}.`;
+  const preferencePersistInstruction =
+    `Preference persistence: only when the user changes a codi preference via command ` +
+    `(\`cod cruise\` / \`cod drive\` / \`cod quiet\` / \`cod verbose\` / ` +
+    `\`cod concise\` / \`cod wildcard\`), persist ONLY mode, verbosity, and wildcard ` +
+    `to the brain-kernel state path: ${brainStatePath}.`;
 
   const onboardingHint = buildOnboardingHint(state);
   const verbosity = state.verbosity ?? "concise";
@@ -451,13 +449,13 @@ export function buildReminder(
     "Local verification: credentials for local runs are usually already in the project's env/config files (.env / .env.local); local testing is expected before you claim done — run it and paste the output.",
     "",
     "Protocol 1 (Status Line): begin EVERY response with the persona/score/Cal/[HH:MM] line — the [HH:MM] is the time from the OS-grounded Now line above (never recalled), so the user sees the response is temporally grounded and can scroll back to a moment. A score requires codi to be LIVE (a fresh heartbeat within the liveness window — the same rule the terminal status line uses); otherwise render `⚠ Codi DEGRADED`, never a %. On a day boundary use [MM-DD HH:MM].",
-    "Protocol 1 Heartbeat: when you render the status line, write ~/.codialectic/state.json last_protocol_ts=current ISO time, version=installed_version, and current last_score/last_cal/persona/mode. This is model-owned proof of execution; hooks must not fake it.",
+    "Protocol 1 Verification: render the status header; the Stop hook verifies the transcript and stamps the heartbeat/counter fields.",
     protocol3Line,
     "Protocol 11 (Persona Roster): activate the appropriate persona at 0.001% caliber based on prompt domain. Task-first routing per skills/co-dialectic/task-persona-map.md — users describe tasks, not persona names.",
     "Protocol 17 (Temporal Grounding): every time-referential phrase ('tonight', 'tomorrow', 'recently', 'yesterday') in your response MUST anchor to the OS-grounded Now line above. Convert relative → absolute datetime before writing.",
     "",
-    writeBackInstruction,
-    "Update last_protocol_ts, version, last_score, last_cal, persona, growth_total_turns (increment by 1), and verbosity fields. The brain-kernel path is the source of truth across sessions and devices.",
+    preferencePersistInstruction,
+    "The brain-kernel path is the source of truth across sessions and devices.",
     "</codi-survival-reminder>",
   ];
   if (onboardingHint) {

@@ -7,9 +7,9 @@
  * via Stop-hook systemMessage, but never blocks or crashes the session.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { homedir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import {
   evaluateSharedLiveness,
   staleSecsFromEnv,
@@ -22,6 +22,9 @@ interface HookInput {
 
 export interface CodiStatusState {
   active?: unknown;
+  mode?: unknown;
+  verbosity?: unknown;
+  wildcard?: unknown;
   persona?: unknown;
   persona_icon?: unknown;
   last_score?: unknown;
@@ -30,6 +33,8 @@ export interface CodiStatusState {
   version?: unknown;
   last_session_start_ts?: unknown;
   last_protocol_ts?: unknown;
+  growth_total_turns?: unknown;
+  [key: string]: unknown;
 }
 
 export interface StatusFreshness {
@@ -47,8 +52,15 @@ export interface RenderedHeader {
   degradedHeader: boolean;
   hasNumericScore: boolean;
   hasStatusScoreToken: boolean;
+  persona: string | null;
+  personaIcon: string | null;
   score: number | null;
   cal: number | null;
+}
+
+export interface StateWriteTarget {
+  path: string;
+  authoritative: boolean;
 }
 
 export interface StatusLivenessCheck {
@@ -88,6 +100,27 @@ export function authoritativeStatePath(): string {
   const brainPath = join(root, "co-dialectic", "status-state.json");
   if (existsSync(brainPath)) return brainPath;
   return join(homeDir(), ".codialectic", "state.json");
+}
+
+function legacyStatePath(): string {
+  return join(homeDir(), ".codialectic", "state.json");
+}
+
+function brainStatePath(): string {
+  const root = process.env.BRAIN_WORKSPACE_ROOT ?? process.env.CAREER_HOME ?? process.cwd();
+  return join(root, "co-dialectic", "status-state.json");
+}
+
+function resolveStateWriteTargets(): StateWriteTarget[] {
+  const brainPath = brainStatePath();
+  const brainDir = dirname(brainPath);
+  if (existsSync(brainDir)) {
+    return [
+      { path: brainPath, authoritative: true },
+      { path: legacyStatePath(), authoritative: false },
+    ];
+  }
+  return [{ path: legacyStatePath(), authoritative: true }];
 }
 
 export function evaluateStatusFreshness(
@@ -133,6 +166,8 @@ export function parseRenderedHeader(message: string): RenderedHeader {
   const liveMatch = firstLine.match(LIVE_HEADER_RE);
   const liveHeader = liveMatch !== null;
   const degradedHeader = DEGRADED_HEADER_RE.test(firstLine);
+  const personaLead = liveMatch ? liveMatch[1].trim() : null;
+  const personaParts = personaLead ? parsePersonaLead(personaLead) : { persona: null, personaIcon: null };
   const score = liveMatch ? Number(liveMatch[2]) : null;
   const cal = liveMatch ? Number(liveMatch[3]) : null;
 
@@ -142,8 +177,19 @@ export function parseRenderedHeader(message: string): RenderedHeader {
     degradedHeader,
     hasNumericScore: liveHeader,
     hasStatusScoreToken: hasStatusScoreToken(message),
+    persona: personaParts.persona,
+    personaIcon: personaParts.personaIcon,
     score,
     cal,
+  };
+}
+
+function parsePersonaLead(lead: string): { persona: string | null; personaIcon: string | null } {
+  const match = lead.match(/^((?:\p{Extended_Pictographic}|\p{S}))\s*(.+)$/u);
+  if (!match) return { persona: lead, personaIcon: null };
+  return {
+    persona: match[2].trim() || null,
+    personaIcon: match[1] || null,
   };
 }
 
@@ -157,7 +203,7 @@ function buildNudge(reason: NonNullable<StatusLivenessCheck["reason"]>): string 
   if (reason === "inconsistent") {
     return [
       "⚠ CODI STATUS INCONSISTENT — the rendered score/Cal does not match the heartbeat in ~/.codialectic/state.json.",
-      "Render only numbers you actually wrote to state.json this turn.",
+      "Render score/Cal numbers from current state; the Stop hook stamps the parsed header after verification.",
     ].join("\n");
   }
   if (reason === "silent-drop") {
@@ -213,6 +259,101 @@ function readState(path: string = authoritativeStatePath()): CodiStatusState {
     throw new Error("state is not an object");
   }
   return parsed as CodiStatusState;
+}
+
+function readStateForWrite(path: string): CodiStatusState {
+  try {
+    if (!existsSync(path)) return {};
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as CodiStatusState;
+  } catch {
+    return {};
+  }
+}
+
+export function resolvePluginVersion(
+  existingState: CodiStatusState = {},
+  hookDir: string = import.meta.dir,
+): string | undefined {
+  try {
+    const pluginJson = join(hookDir, "..", ".claude-plugin", "plugin.json");
+    const parsed = JSON.parse(readFileSync(pluginJson, "utf8"));
+    if (typeof parsed.version === "string" && parsed.version.length > 0) {
+      return parsed.version;
+    }
+  } catch {
+    // Fall through to state-backed version.
+  }
+  return typeof existingState.version === "string" && existingState.version.length > 0
+    ? existingState.version
+    : undefined;
+}
+
+function numericTurnCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function buildStampedState(
+  existingState: CodiStatusState,
+  header: RenderedHeader,
+  now: Date,
+  version: string | undefined,
+): CodiStatusState {
+  const next: CodiStatusState = {
+    ...existingState,
+    last_protocol_ts: now.toISOString(),
+    growth_total_turns: numericTurnCount(existingState.growth_total_turns) + 1,
+  };
+
+  // A rendered Protocol-1 header proves codi executed → it is active. On a
+  // missing/corrupt state file existingState is {} (no active), so default to
+  // true here; nullish-coalesce preserves an explicit active:false (user turned
+  // codi off). Without this, a from-scratch/corrupt-recovery write would leave
+  // active:undefined → isActive()===false → a NEW DEGRADED-on-next-turn path
+  // in the very saga this ticket ends (XOS-198 review finding).
+  next.active = existingState.active ?? true;
+
+  if (header.liveHeader) {
+    next.persona = header.persona;
+    next.last_score = header.score;
+    next.last_cal = header.cal;
+    if (header.personaIcon) next.persona_icon = header.personaIcon;
+  }
+
+  if (version) next.version = version;
+  return next;
+}
+
+function atomicWriteJson(path: string, value: CodiStatusState): void {
+  const dir = dirname(path);
+  const tmpPath = join(dir, `.status-state.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(tmpPath, JSON.stringify(value, null, 2) + "\n");
+  renameSync(tmpPath, path);
+}
+
+export function stampProtocolHeartbeat(
+  header: RenderedHeader,
+  now: Date = new Date(),
+  options: { hookDir?: string; targets?: StateWriteTarget[] } = {},
+): void {
+  if (!header.liveHeader && !header.degradedHeader) return;
+
+  const targets = options.targets ?? resolveStateWriteTargets();
+  let authoritativeWriteFailed = false;
+  for (const target of targets) {
+    if (!target.authoritative && authoritativeWriteFailed) continue;
+    try {
+      const existing = readStateForWrite(target.path);
+      const version = resolvePluginVersion(existing, options.hookDir);
+      const next = buildStampedState(existing, header, now, version);
+      atomicWriteJson(target.path, next);
+    } catch {
+      if (target.authoritative) authoritativeWriteFailed = true;
+      // Stop hooks fail open: heartbeat writes must never block the session.
+    }
+  }
 }
 
 function textFromContent(value: unknown): string[] {
@@ -301,6 +442,7 @@ async function main(): Promise<void> {
   }
 
   const result = checkStatusLiveness(message, state);
+  stampProtocolHeartbeat(result.header);
   if (result.nudge) emitNudge(result.nudge);
   emitSilent();
 }

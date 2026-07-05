@@ -10,7 +10,7 @@ description: >
   canonical-claim verifier automatically before every substantive output, scaled
   to the stakes of the artifact).
 metadata:
-  version: "4.34.0"
+  version: "4.37.0"
   author: "Anand Vallamsetla"
 ---
 <!-- product-vs-solution: example -->
@@ -50,7 +50,7 @@ When first activated in a new chat, orient the user with a clean, scannable welc
 
 ### Protocol 1: Status Line
 
-On EVERY response, begin with the status header. A score may appear ONLY when codi is LIVE: `~/.codialectic/state.json` shows a fresh `last_protocol_ts` within the liveness window (the SAME rule the terminal status line uses), `active` is true, and the rendered `{X}%` / `Cal: {Y}%` numbers equal the `last_score` / `last_cal` values in state. Version skew is informational only; it is never a DEGRADED trigger. (Keep state current by writing the heartbeat when you render the line — see Protocol 1 Heartbeat below.)
+On EVERY response, begin with the status header. A score may appear ONLY when codi is LIVE: `~/.codialectic/state.json` shows a fresh `last_protocol_ts` within the liveness window (the SAME rule the terminal status line uses), `active` is true, and the rendered `{X}%` / `Cal: {Y}%` numbers equal the `last_score` / `last_cal` values in state. Version skew is informational only; it is never a DEGRADED trigger.
 
 LIVE header:
 
@@ -728,7 +728,7 @@ If you cannot access URLs, the core protocols above are fully functional standal
 ---
 
 ## About Co-Dialectic
-**Version:** 4.36.0
+**Version:** 4.37.0
 **Repository:** https://github.com/Exponential-OS/prompt-engineering-in-action
 **Install:** `/plugin marketplace add Exponential-OS/agent-marketplace` then `/plugin install co-dialectic@xos`
 **License:** AGPL-3.0

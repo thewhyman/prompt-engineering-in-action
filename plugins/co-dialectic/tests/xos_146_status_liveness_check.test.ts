@@ -189,7 +189,7 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.freshness.live).toBe(true);
     expect(result.reason).toBe("inconsistent");
     expect(result.nudge).toContain("CODI STATUS INCONSISTENT");
-    expect(result.nudge).toContain("Render only numbers you actually wrote to state.json this turn.");
+    expect(result.nudge).toContain("Render score/Cal numbers from current state");
   });
 
   test("rendered Cal mismatch -> inconsistent nudge", () => {
