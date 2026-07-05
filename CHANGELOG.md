@@ -6,6 +6,14 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.36.0] - 2026-07-04
+
+- XOS-210 (codi half): Protocol 8 auto-verify surfaces cross_family.degraded — a T3 review on <2 distinct families renders a cause-accurate loud degraded line instead of the clean 2-models-agreed line.
+
+## [4.35.0] - 2026-07-04
+
+- XOS-207: judge_panel.ts emits a top-level cross_family health signal (distinct_families_returned/degraded/down_lanes) so a judge lane that errors/times-out/empties is no longer silently dropped to single-family.
+
 ## [4.34.0] - 2026-07-04
 
 - Add XOS-199 never-blocking cost-routing love-nudge: Stop detector for whale-model fish-work, per-session escalation with a three-fire cap, delegation suppression, and next-prompt UserPromptSubmit injection so routing guidance reaches the model before the next turn.

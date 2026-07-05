@@ -502,10 +502,17 @@ bun run plugins/co-dialectic/skills/judge-panel/scripts/judge_panel.ts \
   --silent
 ```
 
-Parse `final_verdict` + `final_confidence` + `all_flags`. Surface to user as:
+Parse `final_verdict` + `final_confidence` + `all_flags` + `cross_family` (XOS-210). Surface to user as:
 - `🟢 2 independent models agreed — clean` when `final_verdict == "pass"` and `final_confidence ≥ 80`
 - `🟡 2 models reviewed — 1 flag` when `pass` with low confidence or flags present
 - `⚠ review flagged — type 'codi verify why' for details` when `final_verdict == "fail"`
+
+**Cross-family health (XOS-210 — read the AUTHORITATIVE `cross_family.degraded`, never `all_flags[0]`).** The judge JSON carries a top-level `cross_family` object (co-dialectic ≥ 4.35.0): `{ distinct_families_returned, degraded, down_lanes:[{family,model,reason}] }`. `degraded == true` means **fewer than two DISTINCT families returned a real verdict** — which has THREE causes. Word the surfaced line to match the actual cause (do NOT hardcode "lane down"; it is only one case), and evaluate the branches IN THIS ORDER (they would otherwise overlap — zero-family also has non-empty `down_lanes`):
+1. **Zero families** first (`distinct_families_returned == 0`): `⚠ CROSS-FAMILY DEGRADED — no family returned a verdict (<each down lane: family (reason), comma-separated>); this T3 check produced no cross-family signal.`
+2. **Else a lane went down** (`down_lanes` non-empty, `distinct_families_returned == 1`): `⚠ CROSS-FAMILY DEGRADED — <each down lane listed: family (reason), comma-separated — plural if >1> down; T3 ran on <returned families> only. Fix the lane(s) (agy/codex CLI: background+poll, never `timeout`-wrapped) or treat the verdict as provisional.` (List EVERY down lane with its own reason — `down_lanes` is an array; do not collapse to one.)
+3. **Else same-family only** (`down_lanes` empty, `distinct_families_returned == 1`): `⚠ CROSS-FAMILY DEGRADED — only the <family> family reviewed this (need ≥2 distinct families); not a true cross-family check.` (No lane outage — a coverage/composition gap; do NOT tell the user to "fix a lane".)
+
+In all three, DO NOT render the clean `🟢 2 independent models agreed` line — a same-family or single-family review is the closed loop T3 exists to avoid. This turns the silent-degradation that motivated XOS-207/210 (a down agy lane → T3 gate ran OpenAI-only, undetected) into a loud, accurate, user-visible signal. Backward-compatible: a judge JSON without `cross_family` (older harness) → omit the line (no crash), as before.
 
 #### Live (T4) explicit-confirm flow
 
@@ -555,7 +562,7 @@ When the tier classifier reaches Live (T4):
 Protocol 8 adds to Protocol 1's status line only when verification fires (T2+). Silent at T0/T1.
 
 - **Shared (T2):** Append to response footer: `🟢 Grounded — no hallucinations detected`
-- **Significant (T3):** Append to response footer: `🟢 2 independent models agreed — clean`
+- **Significant (T3):** Append to response footer: `🟢 2 independent models agreed — clean` — BUT only when `cross_family.degraded == false`. When the T3 judge returned `cross_family.degraded == true` (XOS-210), replace the clean line with the cause-accurate loud degraded line (lane-down / same-family-only / zero-family — see the three-branch spec in the Significant (T3) dispatch section above). Never render the clean two-model line on a degraded verdict.
 - **Live (T4):** Preflight summary replaces footer until `send` confirmation.
 - **Verify OFF:** Append once to first response after disabling: `codi verify: OFF — no auto-verification this session`
 
@@ -721,7 +728,7 @@ If you cannot access URLs, the core protocols above are fully functional standal
 ---
 
 ## About Co-Dialectic
-**Version:** 4.34.0
+**Version:** 4.36.0
 **Repository:** https://github.com/Exponential-OS/prompt-engineering-in-action
 **Install:** `/plugin marketplace add Exponential-OS/agent-marketplace` then `/plugin install co-dialectic@xos`
 **License:** AGPL-3.0
