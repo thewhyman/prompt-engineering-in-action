@@ -1,13 +1,13 @@
 {
   "verdict": "GREEN",
   "findings": [],
-  "manifest_sha256": "b99064d2aa94971a641c1dfda5fe613d47fe73297c138dc6b32ba44ca7efb66a",
+  "manifest_sha256": "5060b7b05abd959166f9f269f429045151256ec2b0034be0f7aac574168cc0c3",
   "reviewer_model": "claude-fable-5",
   "reviewer_family": "anthropic",
   "cross_family": {
     "status": "not_required"
   },
-  "cycle": 4,
-  "timestamp": "2026-07-05T06:28:04.660Z",
-  "spec_sha256": "af9fc6821b36498d0e0dd762bf9fd014b812b277aefb001ebd2089888b52ba24"
+  "cycle": 5,
+  "timestamp": "2026-07-05T08:20:05.436Z",
+  "spec_sha256": "03bb084f732ac109c74d863a111f6a882ae072217d574defc2747f95bcae70bc"
 }
