@@ -1,5 +1,9 @@
 # Changelog — Co-Dialectic
 
+## [4.36.0] — 2026-07-04 — XOS-210 (codi half): Protocol 8 surfaces cross_family.degraded
+
+- Protocol 8 auto-verify now reads the judge JSON authoritative `cross_family.degraded` field (from co-dialectic ≥4.35.0 / XOS-207). A T3 auto-verify that ran on <2 distinct families no longer renders the clean `🟢 2 independent models agreed` line — it surfaces a loud `⚠ CROSS-FAMILY DEGRADED — <family> lane down; T3 ran single-family` instead. Turns the silent single-family blind spot (down agy lane → T3 gate ran OpenAI-only, undetected) into a user-visible signal. Read cross_family.degraded, never all_flags[0]. Backward-compatible (no field → omit line). Prose-only Protocol-8 instruction change; companion to XOS-210 super-developer receipt half.
+
 ## [4.35.0] — 2026-07-04 — XOS-207: loud cross-family degradation signal
 
 - judge_panel.ts emits a top-level `cross_family` health object (`distinct_families_returned`, `degraded`, `down_lanes[{family,model,reason}]`) computed over stage-1 + tiebreaker jurors. A judge lane that errors/times out/empties is no longer silently dropped: `degraded = distinct families with a real verdict < 2` (a different-family tiebreaker restores cross-family), and a loud `⚠ CROSS-FAMILY DEGRADED` line is appended to `all_flags` (preserving existing indices). Structured `cross_family.degraded` is authoritative; consumers read it, never all_flags[0]. Additive + backward-compatible; verdict math unchanged. Fixes the silent-single-family blind spot (agy Google lane down → gates ran OpenAI-only, undetected).
