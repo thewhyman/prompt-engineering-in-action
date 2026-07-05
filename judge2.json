@@ -1,0 +1,94 @@
+{
+  "version": "3.4.0",
+  "rubric": "custom",
+  "persona": null,
+  "cascade": {
+    "stage_1_small_fish": [
+      {
+        "model": "Gemini 3.5 Flash (Low)",
+        "family": "google",
+        "verdict": "pass",
+        "confidence": 100,
+        "flags": [
+          "stamps only on valid header",
+          "migration edge reads base state once",
+          "model-owned fields preserved",
+          "dual-path authoritative-mirror fail-open verified",
+          "active defaults true on fresh",
+          "version resolution safe fallback",
+          "retiring fabrication and inconsistent is correct"
+        ],
+        "tokens_in": 3110,
+        "tokens_out": 132,
+        "latency_ms": 265827,
+        "raw_response": "Is there anything else I can search or do while we wait for the `find` command to finish? I will pause my tool calls and wait for the command output.\nI'm waiting for the search command to locate the file on disk.\n{\"verdict\":\"pass\",\"confidence\":100,\"flags\":[\"stamps only on valid header\",\"migration edge reads base state once\",\"model-owned fields preserved\",\"dual-path authoritative-mirror fail-open verified\",\"active defaults true on fresh\",\"version resolution safe fallback\",\"retiring fabrication and inconsistent is correct\"]}",
+        "error": null
+      },
+      {
+        "model": "gpt-5.4",
+        "family": "openai",
+        "verdict": "fail",
+        "confidence": 94,
+        "flags": [
+          "quiet-mode regression: `status-liveness-check.ts` stamps only live/degraded top headers, but `SKILL.md`/`SKILL-lite.md` still define `codi quiet` as footer-only after model-side heartbeat writes were removed, so `last_protocol_ts` and `growth_total_turns` stop updating",
+          "valid iconless live headers (`Product (Doshi) · ...`) preserve the previous `persona_icon`, so a persona switch can stamp a stale icon into state and misrender statusline/user-prompt-submit"
+        ],
+        "tokens_in": 3110,
+        "tokens_out": 127,
+        "latency_ms": 271875,
+        "raw_response": "{\"verdict\":\"fail\",\"confidence\":94,\"flags\":[\"quiet-mode regression: `status-liveness-check.ts` stamps only live/degraded top headers, but `SKILL.md`/`SKILL-lite.md` still define `codi quiet` as footer-only after model-side heartbeat writes were removed, so `last_protocol_ts` and `growth_total_turns` stop updating\",\"valid iconless live headers (`Product (Doshi) · ...`) preserve the previous `persona_icon`, so a persona switch can stamp a stale icon into state and misrender statusline/user-prompt-submit\"]}",
+        "error": null
+      }
+    ],
+    "agreement": "disagree",
+    "confidence_tier": "n/a",
+    "escalated": true,
+    "stage_2_tiebreaker": {
+      "model": "Gemini 3.1 Pro (High)",
+      "family": "google",
+      "verdict": "pass",
+      "confidence": 100,
+      "flags": [
+        "Valid header filter prevents fabrication",
+        "Base state read once and propagates safely",
+        "Model-owned fields preserved via spread",
+        "Fail-open dual-write prevents divergence",
+        "Active defaults to true correctly",
+        "Plugin version safe fallback verified",
+        "False-positive reasons cleanly retired"
+      ],
+      "tokens_in": 3110,
+      "tokens_out": 83,
+      "latency_ms": 66494,
+      "raw_response": "{\"verdict\":\"pass\",\"confidence\":100,\"flags\":[\"Valid header filter prevents fabrication\",\"Base state read once and propagates safely\",\"Model-owned fields preserved via spread\",\"Fail-open dual-write prevents divergence\",\"Active defaults to true correctly\",\"Plugin version safe fallback verified\",\"False-positive reasons cleanly retired\"]}",
+      "error": null
+    }
+  },
+  "final_verdict": "pass",
+  "final_confidence": 100,
+  "cross_family": {
+    "distinct_families_returned": 2,
+    "degraded": false,
+    "down_lanes": []
+  },
+  "all_flags": [
+    "stamps only on valid header",
+    "migration edge reads base state once",
+    "model-owned fields preserved",
+    "dual-path authoritative-mirror fail-open verified",
+    "active defaults true on fresh",
+    "version resolution safe fallback",
+    "retiring fabrication and inconsistent is correct",
+    "quiet-mode regression: `status-liveness-check.ts` stamps only live/degraded top headers, but `SKILL.md`/`SKILL-lite.md` still define `codi quiet` as footer-only after model-side heartbeat writes were removed, so `last_protocol_ts` and `growth_total_turns` stop updating",
+    "valid iconless live headers (`Product (Doshi) · ...`) preserve the previous `persona_icon`, so a persona switch can stamp a stale icon into state and misrender statusline/user-prompt-submit",
+    "Valid header filter prevents fabrication",
+    "Base state read once and propagates safely",
+    "Model-owned fields preserved via spread",
+    "Fail-open dual-write prevents divergence",
+    "Active defaults to true correctly",
+    "Plugin version safe fallback verified",
+    "False-positive reasons cleanly retired"
+  ],
+  "cost_usd_estimate": 0.011138,
+  "cost_vs_naive_parallel_jury_ratio": 0.82
+}

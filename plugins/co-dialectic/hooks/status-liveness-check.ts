@@ -50,6 +50,7 @@ export interface RenderedHeader {
   firstLine: string;
   liveHeader: boolean;
   degradedHeader: boolean;
+  quietFooter: boolean;
   hasNumericScore: boolean;
   hasStatusScoreToken: boolean;
   persona: string | null;
@@ -151,15 +152,26 @@ function firstNonEmptyLine(message: string): string {
   return message.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() ?? "";
 }
 
+function lastNonEmptyLine(message: string): string {
+  const lines = message.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return "";
+}
+
 function hasStatusScoreToken(message: string): boolean {
   return STATUS_SCORE_TOKEN_RE.test(message);
 }
 
 export function parseRenderedHeader(message: string): RenderedHeader {
   const firstLine = firstNonEmptyLine(message);
+  const finalLine = lastNonEmptyLine(message);
   const liveMatch = firstLine.match(LIVE_HEADER_RE);
   const liveHeader = liveMatch !== null;
   const degradedHeader = DEGRADED_HEADER_RE.test(firstLine);
+  const quietFooter = /^Co-Dialectic tracking silently/.test(finalLine);
   const personaLead = liveMatch ? liveMatch[1].trim() : null;
   const personaParts = personaLead ? parsePersonaLead(personaLead) : { persona: null, personaIcon: null };
   const score = liveMatch ? Number(liveMatch[2]) : null;
@@ -169,6 +181,7 @@ export function parseRenderedHeader(message: string): RenderedHeader {
     firstLine,
     liveHeader,
     degradedHeader,
+    quietFooter,
     hasNumericScore: liveHeader,
     hasStatusScoreToken: hasStatusScoreToken(message),
     persona: personaParts.persona,
@@ -211,7 +224,9 @@ export function checkStatusLiveness(
   const scorePermitted = freshness.live;
 
   let reason: StatusLivenessCheck["reason"] = null;
-  if (!scorePermitted) {
+  if (header.quietFooter) {
+    reason = null;
+  } else if (!scorePermitted) {
     if (!header.liveHeader && !header.degradedHeader) {
       reason = freshness.degraded ? "missing-degraded-header" : "silent-drop";
     }
@@ -300,9 +315,9 @@ function buildStampedState(
 
   if (header.liveHeader) {
     next.persona = header.persona;
+    next.persona_icon = header.personaIcon;
     next.last_score = header.score;
     next.last_cal = header.cal;
-    if (header.personaIcon) next.persona_icon = header.personaIcon;
   }
 
   if (version) next.version = version;
@@ -322,7 +337,7 @@ export function stampProtocolHeartbeat(
   now: Date = new Date(),
   options: { hookDir?: string; targets?: StateWriteTarget[] } = {},
 ): void {
-  if (!header.liveHeader && !header.degradedHeader) return;
+  if (!header.liveHeader && !header.degradedHeader && !header.quietFooter) return;
 
   const targets = options.targets ?? resolveStateWriteTargets();
   const existing = readBaseStateForWrite(targets);

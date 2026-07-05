@@ -256,6 +256,112 @@ describe("XOS-198 deterministic heartbeat writer", () => {
     expect(stamped.last_cal).toBe(96);
   });
 
+  test("quiet footer stamps liveness only without nudging for live or stale prior state", () => {
+    const quietMessage = [
+      "Quiet-mode work complete.",
+      "",
+      "Co-Dialectic tracking silently (type 'codi status' for info, 'codi on' to un-quiet)",
+    ].join("\n");
+
+    for (const lastProtocolTs of [
+      isoSeconds(new Date(Date.now() - 10_000)),
+      isoSeconds(new Date(Date.now() - 2_000_000)),
+    ]) {
+      const home = makeTempDir("codi-xos-198-home-");
+      const workspace = makeTempDir("codi-xos-198-workspace-");
+      writeBrainState(workspace, baseState({
+        active: undefined,
+        last_protocol_ts: lastProtocolTs,
+        last_score: 88,
+        last_cal: 96,
+        persona: "Product",
+        persona_icon: "box",
+        growth_total_turns: 5,
+      }));
+
+      const before = Date.now();
+      const result = runHook(home, workspace, quietMessage);
+      const after = Date.now();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toBe("");
+
+      const stamped = readJson(brainPath(workspace));
+      expectFreshIso(stamped.last_protocol_ts, before, after);
+      expect(stamped.growth_total_turns).toBe(6);
+      expect(stamped.active).toBe(true);
+      expect(stamped.version).toBe(pluginVersion());
+      expect(stamped.last_score).toBe(88);
+      expect(stamped.last_cal).toBe(96);
+      expect(stamped.persona).toBe("Product");
+      expect(stamped.persona_icon).toBe("box");
+    }
+  });
+
+  test("quiet phrase away from final line still nudges and does not stamp", () => {
+    const message = [
+      "Review note:",
+      "Co-Dialectic tracking silently is documented here for reviewers.",
+      "Done without a status header.",
+    ].join("\n");
+
+    for (const [lastProtocolTs, expectedNudge] of [
+      [isoSeconds(new Date(Date.now() - 10_000)), "codi is LIVE"],
+      [isoSeconds(new Date(Date.now() - 2_000_000)), "codi is DEGRADED"],
+    ] as const) {
+      const home = makeTempDir("codi-xos-198-home-");
+      const workspace = makeTempDir("codi-xos-198-workspace-");
+      writeBrainState(workspace, baseState({
+        last_protocol_ts: lastProtocolTs,
+        growth_total_turns: 5,
+      }));
+
+      const result = runHook(home, workspace, message);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain("CODI STATUS SILENT DROP");
+      expect(result.stdout).toContain(expectedNudge);
+
+      const state = readJson(brainPath(workspace));
+      expect(state.last_protocol_ts).toBe(lastProtocolTs);
+      expect(state.growth_total_turns).toBe(5);
+    }
+  });
+
+  test("live persona icon sync clears stale icon on iconless headers and sets present icons", () => {
+    const home = makeTempDir("codi-xos-198-home-");
+    const workspace = makeTempDir("codi-xos-198-workspace-");
+    writeBrainState(workspace, baseState({
+      persona: "Design",
+      persona_icon: "art-palette",
+      growth_total_turns: 5,
+    }));
+
+    const iconless = runHook(home, workspace, "Product (Doshi) · 91% · Cal: 93% · [12:00]\nDone.");
+
+    expect(iconless.exitCode).toBe(0);
+    expect(iconless.stderr).toBe("");
+    expect(iconless.stdout).toBe("");
+    const iconlessState = readJson(brainPath(workspace));
+    expect(iconlessState.persona).toBe("Product (Doshi)");
+    expect(iconlessState.persona_icon).toBeNull();
+    expect(iconlessState.last_score).toBe(91);
+    expect(iconlessState.last_cal).toBe(93);
+
+    const withIcon = runHook(home, workspace, "📦 Product (Doshi) · 92% · Cal: 94% · [12:01]\nDone.");
+
+    expect(withIcon.exitCode).toBe(0);
+    expect(withIcon.stderr).toBe("");
+    expect(withIcon.stdout).toBe("");
+    const withIconState = readJson(brainPath(workspace));
+    expect(withIconState.persona).toBe("Product (Doshi)");
+    expect(withIconState.persona_icon).toBe("📦");
+    expect(withIconState.last_score).toBe(92);
+    expect(withIconState.last_cal).toBe(94);
+  });
+
   test("no Protocol 1 header does not write and still nudges", () => {
     const home = makeTempDir("codi-xos-198-home-");
     const workspace = makeTempDir("codi-xos-198-workspace-");
