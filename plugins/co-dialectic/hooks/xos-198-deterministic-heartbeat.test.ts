@@ -16,7 +16,11 @@ import {
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import {
+  authoritativeStatePath,
+  checkStatusLiveness,
+  legacyStatePath,
   parseRenderedHeader,
+  resolveStateWriteTargets,
   stampProtocolHeartbeat,
 } from "./status-liveness-check.ts";
 
@@ -69,6 +73,26 @@ function legacyPath(home: string): string {
 
 function brainPath(workspace: string): string {
   return join(workspace, "co-dialectic", "status-state.json");
+}
+
+function withEnv<T>(updates: Record<string, string>, fn: () => T): T {
+  const previous: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    previous[key] = process.env[key];
+    process.env[key] = value;
+  }
+
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 function writeJson(path: string, value: Record<string, unknown>): void {
@@ -140,6 +164,41 @@ afterEach(() => {
 });
 
 describe("XOS-198 deterministic heartbeat writer", () => {
+  test("score changes and stale resurrection do not nudge, but missing headers still do", () => {
+    const now = new Date();
+    const fresh = isoSeconds(new Date(now.getTime() - 10_000));
+    const stale = isoSeconds(new Date(now.getTime() - 2_000_000));
+
+    const changedScore = checkStatusLiveness(
+      "📦 Product · 91% · Cal: 93% · [12:01]\nDone.",
+      baseState({ last_protocol_ts: fresh, last_score: 88, last_cal: 96 }),
+      now,
+      900,
+    );
+    expect(changedScore.freshness.live).toBe(true);
+    expect(changedScore.reason).toBeNull();
+    expect(changedScore.nudge).toBeNull();
+
+    const resurrected = checkStatusLiveness(
+      "📦 Product · 91% · Cal: 93% · [12:01]\nDone.",
+      baseState({ last_protocol_ts: stale, last_score: 88, last_cal: 96 }),
+      now,
+      900,
+    );
+    expect(resurrected.freshness.degraded).toBe(true);
+    expect(resurrected.header.liveHeader).toBe(true);
+    expect(resurrected.reason).toBeNull();
+    expect(resurrected.nudge).toBeNull();
+
+    const silentDrop = checkStatusLiveness("Done.", baseState({ last_protocol_ts: fresh }), now, 900);
+    expect(silentDrop.reason).toBe("silent-drop");
+    expect(silentDrop.nudge).toContain("codi is LIVE");
+
+    const missingDegraded = checkStatusLiveness("Done.", baseState({ last_protocol_ts: stale }), now, 900);
+    expect(missingDegraded.reason).toBe("missing-degraded-header");
+    expect(missingDegraded.nudge).toContain("codi is DEGRADED");
+  });
+
   test("valid live header stamps brain and legacy, preserves preferences, and increments across turns", () => {
     const home = makeTempDir("codi-xos-198-home-");
     const workspace = makeTempDir("codi-xos-198-workspace-");
@@ -246,6 +305,46 @@ describe("XOS-198 deterministic heartbeat writer", () => {
     expect(state.active).toBe(true);
     expect(state.growth_total_turns).toBe(1);
     expectFreshIso(state.last_protocol_ts, before, after);
+  });
+
+  test("first migration seeds missing brain state from existing legacy state", () => {
+    const home = makeTempDir("codi-xos-198-home-");
+    const workspace = makeTempDir("codi-xos-198-workspace-");
+    mkdirSync(dirname(brainPath(workspace)), { recursive: true });
+    writeLegacyState(home, baseState({
+      growth_total_turns: 7,
+      mode: "cruise",
+      verbosity: "verbose",
+      wildcard: true,
+    }));
+
+    const result = runHook(home, workspace, "📦 Product · 90% · Cal: 94% · [12:00]\nDone.");
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toBe("");
+    const brain = readJson(brainPath(workspace));
+    const legacy = readJson(legacyPath(home));
+    expect(brain).toEqual(legacy);
+    expect(brain.growth_total_turns).toBe(8);
+    expect(brain.mode).toBe("cruise");
+    expect(brain.verbosity).toBe("verbose");
+    expect(brain.wildcard).toBe(true);
+    expect(brain.last_score).toBe(90);
+    expect(brain.last_cal).toBe(94);
+  });
+
+  test("read fallback legacy path matches write legacy target", () => {
+    const home = makeTempDir("codi-xos-198-home-");
+    const workspace = makeTempDir("codi-xos-198-workspace-");
+    mkdirSync(dirname(brainPath(workspace)), { recursive: true });
+
+    withEnv({ HOME: home, BRAIN_WORKSPACE_ROOT: workspace, CAREER_HOME: "" }, () => {
+      const legacyTarget = resolveStateWriteTargets().find((target) => !target.authoritative);
+      expect(legacyTarget?.path).toBe(legacyStatePath());
+      expect(authoritativeStatePath()).toBe(legacyTarget?.path);
+      expect(legacyTarget?.path).toBe(legacyPath(home));
+    });
   });
 
   test("explicit active:false is preserved (user turned codi off), not forced true", () => {

@@ -64,7 +64,7 @@ export interface StateWriteTarget {
 }
 
 export interface StatusLivenessCheck {
-  reason: "fabrication" | "inconsistent" | "silent-drop" | "missing-degraded-header" | null;
+  reason: "silent-drop" | "missing-degraded-header" | null;
   nudge: string | null;
   freshness: StatusFreshness;
   header: RenderedHeader;
@@ -99,10 +99,10 @@ export function authoritativeStatePath(): string {
   const root = process.env.BRAIN_WORKSPACE_ROOT ?? process.env.CAREER_HOME ?? process.cwd();
   const brainPath = join(root, "co-dialectic", "status-state.json");
   if (existsSync(brainPath)) return brainPath;
-  return join(homeDir(), ".codialectic", "state.json");
+  return legacyStatePath();
 }
 
-function legacyStatePath(): string {
+export function legacyStatePath(): string {
   return join(homeDir(), ".codialectic", "state.json");
 }
 
@@ -111,7 +111,7 @@ function brainStatePath(): string {
   return join(root, "co-dialectic", "status-state.json");
 }
 
-function resolveStateWriteTargets(): StateWriteTarget[] {
+export function resolveStateWriteTargets(): StateWriteTarget[] {
   const brainPath = brainStatePath();
   const brainDir = dirname(brainPath);
   if (existsSync(brainDir)) {
@@ -145,12 +145,6 @@ export function evaluateStatusFreshness(
     inactive: liveness.inactive,
     installedVersion,
   };
-}
-
-function parseOptionalNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && /^\d+$/.test(value.trim())) return Number(value.trim());
-  return null;
 }
 
 function firstNonEmptyLine(message: string): string {
@@ -194,18 +188,6 @@ function parsePersonaLead(lead: string): { persona: string | null; personaIcon: 
 }
 
 function buildNudge(reason: NonNullable<StatusLivenessCheck["reason"]>): string {
-  if (reason === "fabrication") {
-    return [
-      "⚠ CODI STATUS FABRICATION — the response showed a score while codi is DEGRADED (stale/absent heartbeat or inactive).",
-      "Unless codi is LIVE (a fresh heartbeat within the liveness window — the same rule the terminal status line uses), render `⚠ Codi DEGRADED` with no score, never invented numbers.",
-    ].join("\n");
-  }
-  if (reason === "inconsistent") {
-    return [
-      "⚠ CODI STATUS INCONSISTENT — the rendered score/Cal does not match the heartbeat in ~/.codialectic/state.json.",
-      "Render score/Cal numbers from current state; the Stop hook stamps the parsed header after verification.",
-    ].join("\n");
-  }
   if (reason === "silent-drop") {
     return [
       "⚠ CODI STATUS SILENT DROP — codi is LIVE but the Protocol 1 status line was missing.",
@@ -226,21 +208,15 @@ export function checkStatusLiveness(
 ): StatusLivenessCheck {
   const freshness = evaluateStatusFreshness(state, now, staleSecs);
   const header = parseRenderedHeader(message);
-  const expectedScore = parseOptionalNumber(state?.last_score);
-  const expectedCal = parseOptionalNumber(state?.last_cal);
   const scorePermitted = freshness.live;
 
   let reason: StatusLivenessCheck["reason"] = null;
   if (!scorePermitted) {
-    if (header.liveHeader || header.hasStatusScoreToken) {
-      reason = "fabrication";
-    } else if (!header.degradedHeader) {
+    if (!header.liveHeader && !header.degradedHeader) {
       reason = freshness.degraded ? "missing-degraded-header" : "silent-drop";
     }
   } else if (!header.liveHeader) {
     reason = "silent-drop";
-  } else if (header.score !== expectedScore || header.cal !== expectedCal) {
-    reason = "inconsistent";
   }
 
   return {
@@ -261,15 +237,23 @@ function readState(path: string = authoritativeStatePath()): CodiStatusState {
   return parsed as CodiStatusState;
 }
 
-function readStateForWrite(path: string): CodiStatusState {
+function readExistingStateForWrite(path: string): CodiStatusState | null {
   try {
-    if (!existsSync(path)) return {};
+    if (!existsSync(path)) return null;
     const parsed = JSON.parse(readFileSync(path, "utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     return parsed as CodiStatusState;
   } catch {
-    return {};
+    return null;
   }
+}
+
+function readBaseStateForWrite(targets: StateWriteTarget[]): CodiStatusState {
+  for (const target of targets) {
+    const state = readExistingStateForWrite(target.path);
+    if (state !== null) return state;
+  }
+  return {};
 }
 
 export function resolvePluginVersion(
@@ -341,13 +325,13 @@ export function stampProtocolHeartbeat(
   if (!header.liveHeader && !header.degradedHeader) return;
 
   const targets = options.targets ?? resolveStateWriteTargets();
+  const existing = readBaseStateForWrite(targets);
+  const version = resolvePluginVersion(existing, options.hookDir);
+  const next = buildStampedState(existing, header, now, version);
   let authoritativeWriteFailed = false;
   for (const target of targets) {
     if (!target.authoritative && authoritativeWriteFailed) continue;
     try {
-      const existing = readStateForWrite(target.path);
-      const version = resolvePluginVersion(existing, options.hookDir);
-      const next = buildStampedState(existing, header, now, version);
       atomicWriteJson(target.path, next);
     } catch {
       if (target.authoritative) authoritativeWriteFailed = true;
