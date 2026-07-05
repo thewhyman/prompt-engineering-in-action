@@ -166,7 +166,7 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.nudge).toBeNull();
   });
 
-  test("DEGRADED stale/absent last_protocol_ts + response has a percent -> fabrication nudge", () => {
+  test("DEGRADED stale/absent last_protocol_ts + live header -> no nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 88% · Cal: 96% · [12:00]\nDone.",
       baseState({ last_protocol_ts: null }),
@@ -174,12 +174,12 @@ describe("status-liveness-check hook decisions", () => {
     );
 
     expect(result.freshness.degraded).toBe(true);
-    expect(result.reason).toBe("fabrication");
-    expect(result.nudge).toContain("CODI STATUS FABRICATION");
-    expect(result.nudge).toContain("never invented numbers");
+    expect(result.header.liveHeader).toBe(true);
+    expect(result.reason).toBeNull();
+    expect(result.nudge).toBeNull();
   });
 
-  test("rendered score mismatch -> inconsistent nudge", () => {
+  test("LIVE + rendered score changed since prior stamp -> no nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 87% · Cal: 96% · [12:00]\nDone.",
       baseState(),
@@ -187,19 +187,20 @@ describe("status-liveness-check hook decisions", () => {
     );
 
     expect(result.freshness.live).toBe(true);
-    expect(result.reason).toBe("inconsistent");
-    expect(result.nudge).toContain("CODI STATUS INCONSISTENT");
-    expect(result.nudge).toContain("Render only numbers you actually wrote to state.json this turn.");
+    expect(result.reason).toBeNull();
+    expect(result.nudge).toBeNull();
   });
 
-  test("rendered Cal mismatch -> inconsistent nudge", () => {
+  test("LIVE + rendered Cal changed since prior stamp -> no nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 88% · Cal: 95% · [12:00]\nDone.",
       baseState(),
       NOW,
     );
 
-    expect(result.reason).toBe("inconsistent");
+    expect(result.freshness.live).toBe(true);
+    expect(result.reason).toBeNull();
+    expect(result.nudge).toBeNull();
   });
 
   test("LIVE + no status line -> silent-drop nudge", () => {
@@ -239,7 +240,7 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.reason).toBe("silent-drop");
   });
 
-  test("DEGRADED + prose percent is missing degraded header, not fabrication", () => {
+  test("DEGRADED + prose percent is missing degraded header", () => {
     const result = checkStatusLiveness(
       "I'm 100% sure Cal: 96% [12:00]\nDone.",
       baseState({ last_protocol_ts: null }),
@@ -252,7 +253,7 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.reason).toBe("missing-degraded-header");
   });
 
-  test("DEGRADED + status-shaped score without Cal -> fabrication nudge", () => {
+  test("DEGRADED + status-shaped score without Cal -> missing degraded header nudge", () => {
     for (const message of [
       "📦 Product (Doshi) · 99% · [12:00]\nDone.",
       "99% · [12:00]\nDone.",
@@ -261,12 +262,12 @@ describe("status-liveness-check hook decisions", () => {
 
       expect(result.freshness.degraded).toBe(true);
       expect(result.header.hasStatusScoreToken).toBe(true);
-      expect(result.reason).toBe("fabrication");
-      expect(result.nudge).toContain("CODI STATUS FABRICATION");
+      expect(result.reason).toBe("missing-degraded-header");
+      expect(result.nudge).toContain("codi is DEGRADED");
     }
   });
 
-  test("DEGRADED + score-token later in message -> fabrication nudge", () => {
+  test("DEGRADED + valid degraded header with score-token later in message -> no nudge", () => {
     const result = checkStatusLiveness(
       "⚠ Codi DEGRADED · [12:00]\nPrior header: · 88% · Cal: 96%",
       baseState({ last_protocol_ts: null }),
@@ -276,8 +277,8 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.freshness.degraded).toBe(true);
     expect(result.header.degradedHeader).toBe(true);
     expect(result.header.hasStatusScoreToken).toBe(true);
-    expect(result.reason).toBe("fabrication");
-    expect(result.nudge).toContain("CODI STATUS FABRICATION");
+    expect(result.reason).toBeNull();
+    expect(result.nudge).toBeNull();
   });
 
   test("DEGRADED + no header at all -> missing degraded header nudge", () => {
@@ -300,7 +301,7 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.nudge).toBeNull();
   });
 
-  test("missing state is treated as DEGRADED and numeric output fabricates", () => {
+  test("missing state is treated as DEGRADED and live header does not nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 88% · Cal: 96% · [12:00]\nDone.",
       null,
@@ -308,26 +309,28 @@ describe("status-liveness-check hook decisions", () => {
     );
 
     expect(result.freshness.degraded).toBe(true);
-    expect(result.reason).toBe("fabrication");
+    expect(result.header.liveHeader).toBe(true);
+    expect(result.reason).toBeNull();
+    expect(result.nudge).toBeNull();
   });
 
-  test("corrupt state.json is DEGRADED and numeric output fabricates on real hook path", () => {
+  test("corrupt state.json + live header fails open without nudge on real hook path", () => {
     const home = makeTempDir("codi-xos-146-home-");
     writeRawState(home, '{"active":true,"last_score":88,');
 
     const result = runHookWithAssistant(home, "📦 Product (Doshi) · 88% · Cal: 96% · [12:00]\nDone.");
 
     expect(result.exitCode).toBe(0);
-    expect(systemMessageFromStdout(result.stdout)).toContain("CODI STATUS FABRICATION");
+    expect(result.stdout).toBe("");
   });
 
-  test("missing state.json is DEGRADED and numeric output fabricates on real hook path", () => {
+  test("missing state.json + live header fails open without nudge on real hook path", () => {
     const home = makeTempDir("codi-xos-146-home-");
 
     const result = runHookWithAssistant(home, "📦 Product (Doshi) · 88% · Cal: 96% · [12:00]\nDone.");
 
     expect(result.exitCode).toBe(0);
-    expect(systemMessageFromStdout(result.stdout)).toContain("CODI STATUS FABRICATION");
+    expect(result.stdout).toBe("");
   });
 
   test("state read failure + degraded header -> no nudge", () => {
@@ -492,5 +495,5 @@ describe("freshness predicate parity with statusline.sh", () => {
       const tsVerdict = evaluateStatusFreshness(state, now, 900).live ? "LIVE" : "DEGRADED";
       expect(tsVerdict).toBe(runStatuslineVerdict(home));
     }
-  });
+  }, 15_000);
 });

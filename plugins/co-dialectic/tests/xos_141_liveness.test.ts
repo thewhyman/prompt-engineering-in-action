@@ -297,7 +297,7 @@ describe("install-survival-layer state sync (XOS-141)", () => {
 });
 
 describe("UserPromptSubmit deterministic self-resurrection (XOS-141)", () => {
-  test("liveness nudge tells the model to refresh the model-owned heartbeat", () => {
+  test("liveness nudge tells the model to render the verified status header", () => {
     const liveness = evaluateCodiLiveness(
       {
         active: true,
@@ -314,7 +314,7 @@ describe("UserPromptSubmit deterministic self-resurrection (XOS-141)", () => {
     expect(liveness.stale).toBe(true);
     expect(liveness.skew).toBe(true); // still computed (informational), no longer gates degraded
     expect(buildDegradationNudge(liveness)).toBe(
-      "⚠ CODI DEGRADED — re-fire Protocol 0/1 NOW: render the status line + set ~/.codialectic/state.json last_protocol_ts to current ISO time (and last_score/last_cal/persona/mode).",
+      "⚠ CODI DEGRADED — re-fire Protocol 0/1 NOW: render the required status header; the Stop hook will stamp the heartbeat after verifying the transcript.",
     );
   });
 
@@ -374,9 +374,9 @@ describe("UserPromptSubmit deterministic self-resurrection (XOS-141)", () => {
     const context = payload.hookSpecificOutput.additionalContext;
 
     expect(context).toContain("state source: missing state (self-resurrection)");
-    expect(context).toContain("No codi state file was loaded");
-    expect(context).toContain("active=true");
-    expect(context).toContain("last_protocol_ts=current ISO time");
+    expect(context).toContain("Preference persistence");
+    expect(context).toContain("persist ONLY mode, verbosity, and wildcard");
+    expect(context).not.toContain("last_protocol_ts=current ISO time");
     expect(payload.systemMessage).toContain("⚠ CODI DEGRADED");
   });
 

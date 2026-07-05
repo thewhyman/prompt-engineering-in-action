@@ -6,6 +6,10 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.37.0] - 2026-07-04
+
+- XOS-198: codi Protocol-1 heartbeat is now deterministic. The Stop hook verifies the final transcript header, stamps liveness/counter fields to the brain state first and legacy mirror second, preserves preference fields, and the model-facing reminder no longer tells the model to write heartbeat/counter state.
+
 ## [4.36.0] - 2026-07-04
 
 - XOS-210 (codi half): Protocol 8 auto-verify surfaces cross_family.degraded — a T3 review on <2 distinct families renders a cause-accurate loud degraded line instead of the clean 2-models-agreed line.

@@ -158,10 +158,11 @@ describe("buildReminder integration (issues #8 + #9)", () => {
     expect(reminder).toContain("Task-first routing");
   });
 
-  test("reminder instructs Claude to increment growth_total_turns", () => {
+  test("reminder leaves per-turn liveness and counter fields to the Stop hook", () => {
     const reminder = buildReminder(makeState({ growth_total_turns: 0 }), "brain");
-    expect(reminder).toContain("growth_total_turns");
-    expect(reminder).toContain("increment by 1");
+    expect(reminder).not.toContain("growth_total_turns");
+    expect(reminder).not.toContain("increment by 1");
+    expect(reminder).toContain("Stop hook");
   });
 
   test("reminder always includes the core survival block", () => {
@@ -229,8 +230,12 @@ describe("verbosity / concise-by-default (issue #10)", () => {
     expect(verboseReminder).toContain("'cod concise'");
   });
 
-  test("write-back instruction tells Claude to persist verbosity", () => {
+  test("preference persistence is narrow and command-driven", () => {
     const reminder = buildReminder(makeState({ growth_total_turns: 50 }), "brain");
+    expect(reminder).toContain("only when the user changes a codi preference via command");
+    expect(reminder).toContain("persist ONLY mode, verbosity, and wildcard");
+    expect(reminder).toContain("cod verbose");
     expect(reminder).toContain("verbosity");
+    expect(reminder).toContain("wildcard");
   });
 });
