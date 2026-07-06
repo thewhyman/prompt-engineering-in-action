@@ -6,6 +6,10 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.38.0] - 2026-07-05
+
+- co-dialectic: single-key sharpen select (I/S/D, context-gated) + canonical `codi` command prefix in the Protocol-3 concise offer and reminder toggles.
+
 ## [4.37.0] - 2026-07-04
 
 - XOS-198: codi Protocol-1 heartbeat is now deterministic. The Stop hook verifies the final transcript header, stamps liveness/counter fields to the brain state first and legacy mirror second, preserves preference fields, and the model-facing reminder no longer tells the model to write heartbeat/counter state.

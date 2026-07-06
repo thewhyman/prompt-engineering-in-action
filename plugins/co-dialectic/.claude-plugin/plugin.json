@@ -1,7 +1,7 @@
 {
   "name": "co-dialectic",
-  "description": "Co-Dialectic v4.37.0 - Deterministic Protocol-1 heartbeat stamping from the Stop hook after transcript header verification.",
-  "version": "4.37.0",
+  "description": "Co-Dialectic v4.38.0 - Single-key sharpen select (I/S/D) + canonical codi command prefix; deterministic Protocol-1 heartbeat.",
+  "version": "4.38.0",
   "depends_on_kernel": [
     "brain-kernel >= 1.0.0",
     "co-dialectic >= 4.16.0"
