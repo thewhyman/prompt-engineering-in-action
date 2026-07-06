@@ -1,5 +1,11 @@
 # Changelog — Co-Dialectic
 
+## [4.38.0] — 2026-07-05 — Single-key sharpen select (I/S/D) + canonical `codi` prefix
+
+- Concise-mode sharpen offer is now `Sharpen? Reply I / S / D → IMPROVED / SOCRATIC / DIALECTIC (or 'codi sharpen' for all three).` A bare `I`/`S`/`D` (case-insensitive, trimmed) immediately after the offer picks that ONE tier — lowest input tax. Context-gated: only interpreted as a sharpen-select right after the offer, so a literal single-letter answer to another question is never hijacked. `codi sharpen` still renders all three.
+- Reminder + skill now use the canonical `codi` command prefix everywhere the full skill shows (was inconsistently `cod`): `codi verbose`/`codi concise`/`codi cruise`/etc.
+
+
 ## [4.37.0] — 2026-07-04 — XOS-198: deterministic Protocol-1 heartbeat
 
 - `status-liveness-check.ts` now stamps the Protocol-1 heartbeat deterministically after it verifies a valid final-assistant status header in the transcript. The Stop hook writes `last_protocol_ts`, parsed score/Cal/persona fields, runtime `version`, and increments `growth_total_turns`, preserving command-owned preferences (`mode`, `verbosity`, `wildcard`, `active`) via read-modify-write.

@@ -10,7 +10,7 @@ description: >
   canonical-claim verifier automatically before every substantive output, scaled
   to the stakes of the artifact).
 metadata:
-  version: "4.37.0"
+  version: "4.38.0"
   author: "Anand Vallamsetla"
 ---
 <!-- product-vs-solution: example -->
@@ -274,6 +274,8 @@ Pick: [i]mproved · [s]ocratic · [d]ialectic · [e]dit · [n]o, use original
 **Drive mode** (default): Show all three tiers, stop and wait for pick.
 
 **Quiet mode**: Show only the chosen tier inline; log all three to growth.jsonl.
+
+**Single-key sharpen select (concise-mode input-tax minimizer):** the concise-mode offer is `Sharpen? Reply I / S / D → IMPROVED / SOCRATIC / DIALECTIC (or 'codi sharpen' for all three).` When the user's NEXT message is exactly `I`, `S`, or `D` (case-insensitive, trimmed) AND the immediately-prior response offered that Sharpen prompt, treat it as picking that ONE tier and render only it (I=IMPROVED, S=SOCRATIC, D=DIALECTIC). **Context-gated:** only interpret a bare `I`/`S`/`D` as a sharpen-select directly after the offer — never elsewhere, so a literal single-letter answer to some other question (e.g. picking option "D") is not hijacked. `codi sharpen` still renders all three tiers. Canonical command prefix is `codi` (not `cod`).
 
 **Improvement techniques** (label one per IMPROVED tier — pick the dominant one):
 
@@ -728,7 +730,7 @@ If you cannot access URLs, the core protocols above are fully functional standal
 ---
 
 ## About Co-Dialectic
-**Version:** 4.37.0
+**Version:** 4.38.0
 **Repository:** https://github.com/Exponential-OS/prompt-engineering-in-action
 **Install:** `/plugin marketplace add Exponential-OS/agent-marketplace` then `/plugin install co-dialectic@xos`
 **License:** AGPL-3.0

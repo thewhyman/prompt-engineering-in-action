@@ -349,7 +349,7 @@ export function buildOnboardingHint(state: CodiState): string {
     "      'critique the UX' → 🎨 UX Critique    'prioritize this list' → 📦 Product Strategy",
     "      'debug this' → 🔍 Debug    'pitch this to a VC' → 🎯 Positioning",
     "  • Type 'who' in any turn to see which persona is active.",
-    "  • Type '/cod verbose' to see persona names; '/cod concise' to hide them.",
+    "  • Type 'codi verbose' to see persona names; 'codi concise' to hide them.",
     "</codi-onboarding-hint>",
   ].join("\n");
 }
@@ -408,19 +408,24 @@ export function buildReminder(
   const brainStatePath = join(workspaceRoot, "co-dialectic/status-state.json");
   const preferencePersistInstruction =
     `Preference persistence: only when the user changes a codi preference via command ` +
-    `(\`cod cruise\` / \`cod drive\` / \`cod quiet\` / \`cod verbose\` / ` +
-    `\`cod concise\` / \`cod wildcard\`), persist ONLY mode, verbosity, and wildcard ` +
+    `(\`codi cruise\` / \`codi drive\` / \`codi quiet\` / \`codi verbose\` / ` +
+    `\`codi concise\` / \`codi wildcard\`), persist ONLY mode, verbosity, and wildcard ` +
     `to the brain-kernel state path: ${brainStatePath}.`;
 
   const onboardingHint = buildOnboardingHint(state);
   const verbosity = state.verbosity ?? "concise";
-  const verbosityLine = `Verbosity: ${verbosity} (toggle: 'cod verbose' / 'cod concise')`;
+  const verbosityLine = `Verbosity: ${verbosity} (toggle: 'codi verbose' / 'codi concise')`;
 
   const protocol3Concise =
     "Protocol 3 (Tiered Sharpening) — CONCISE MODE (default): " +
     "lead with the ANSWER. Do NOT eagerly render the three tiers. " +
     "If the prompt has room to improve, end the response with ONE LINE: " +
-    "`Sharpen? Type 'cod sharpen' for IMPROVED / SOCRATIC / DIALECTIC.` " +
+    "`Sharpen? Reply I / S / D → IMPROVED / SOCRATIC / DIALECTIC (or 'codi sharpen' for all three).` " +
+    "Single-key select (input-tax minimizer): if the user's NEXT message is exactly `I`, `S`, or `D` " +
+    "(case-insensitive, trimmed) AND this response just offered the Sharpen prompt, treat it as picking that " +
+    "one tier and render only it. Only interpret a bare I/S/D as a sharpen-select right after the offer — " +
+    "never elsewhere (so a literal `D`/`S`/`I` answer to some other question is NOT hijacked). `codi sharpen` " +
+    "still renders all three. " +
     "Exception: T3+ stakes (named person, public-facing, irreversible decision) → " +
     "render DIALECTIC inline even in concise mode (the user is making a one-way-door call).";
 
