@@ -201,11 +201,15 @@ describe("XOS-197 grace-window liveness", () => {
     expect(liveness.reasons).toContain("protocol-before-session");
   });
 
-  test("missing state, absent heartbeat, and active:false remain DEGRADED", () => {
+  test("missing/absent heartbeat is UNKNOWN while active:false remains DEGRADED", () => {
     const now = new Date("2026-07-03T12:00:00Z");
 
-    expect(evaluateCodiLiveness(null, "4.34.0", now, 900).degraded).toBe(true);
-    expect(evaluateCodiLiveness(baseState({ last_protocol_ts: null }), "4.34.0", now, 900).degraded).toBe(true);
+    const missing = evaluateCodiLiveness(null, "4.34.0", now, 900);
+    const absent = evaluateCodiLiveness(baseState({ last_protocol_ts: null }), "4.34.0", now, 900);
+    expect(missing.unknown).toBe(true);
+    expect(missing.degraded).toBe(false);
+    expect(absent.unknown).toBe(true);
+    expect(absent.degraded).toBe(false);
     expect(evaluateCodiLiveness(baseState({ active: false }), "4.34.0", now, 900).degraded).toBe(true);
   });
 

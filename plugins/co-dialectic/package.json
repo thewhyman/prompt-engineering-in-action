@@ -1,11 +1,11 @@
 {
   "name": "co-dialectic",
-  "version": "4.34.0",
+  "version": "4.39.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "bun test ./tests/test_brain_kernel_bootstrap.ts",
-    "test:all": "bun test ./tests/test_brain_kernel_bootstrap.ts"
+    "test:all": "bun test ./hooks/*.test.ts ./skills/judge-panel/scripts/*.test.ts ./tests/*.test.ts ./tests/test_*.ts --isolate --parallel=1 --timeout=5000"
   },
   "devDependencies": {
     "@types/bun": "latest"

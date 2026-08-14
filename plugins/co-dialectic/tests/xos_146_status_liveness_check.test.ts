@@ -166,14 +166,15 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.nudge).toBeNull();
   });
 
-  test("DEGRADED stale/absent last_protocol_ts + live header -> no nudge", () => {
+  test("UNKNOWN absent last_protocol_ts + live header initializes without nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 88% · Cal: 96% · [12:00]\nDone.",
       baseState({ last_protocol_ts: null }),
       NOW,
     );
 
-    expect(result.freshness.degraded).toBe(true);
+    expect(result.freshness.unknown).toBe(true);
+    expect(result.freshness.degraded).toBe(false);
     expect(result.header.liveHeader).toBe(true);
     expect(result.reason).toBeNull();
     expect(result.nudge).toBeNull();
@@ -243,7 +244,7 @@ describe("status-liveness-check hook decisions", () => {
   test("DEGRADED + prose percent is missing degraded header", () => {
     const result = checkStatusLiveness(
       "I'm 100% sure Cal: 96% [12:00]\nDone.",
-      baseState({ last_protocol_ts: null }),
+      baseState({ last_protocol_ts: "2026-06-29T05:59:59Z" }),
       NOW,
     );
 
@@ -258,7 +259,7 @@ describe("status-liveness-check hook decisions", () => {
       "📦 Product (Doshi) · 99% · [12:00]\nDone.",
       "99% · [12:00]\nDone.",
     ]) {
-      const result = checkStatusLiveness(message, baseState({ last_protocol_ts: null }), NOW);
+      const result = checkStatusLiveness(message, baseState({ last_protocol_ts: "2026-06-29T05:59:59Z" }), NOW);
 
       expect(result.freshness.degraded).toBe(true);
       expect(result.header.hasStatusScoreToken).toBe(true);
@@ -270,7 +271,7 @@ describe("status-liveness-check hook decisions", () => {
   test("DEGRADED + valid degraded header with score-token later in message -> no nudge", () => {
     const result = checkStatusLiveness(
       "⚠ Codi DEGRADED · [12:00]\nPrior header: · 88% · Cal: 96%",
-      baseState({ last_protocol_ts: null }),
+      baseState({ last_protocol_ts: "2026-06-29T05:59:59Z" }),
       NOW,
     );
 
@@ -282,7 +283,7 @@ describe("status-liveness-check hook decisions", () => {
   });
 
   test("DEGRADED + no header at all -> missing degraded header nudge", () => {
-    const result = checkStatusLiveness("Done.", baseState({ last_protocol_ts: null }), NOW);
+    const result = checkStatusLiveness("Done.", baseState({ last_protocol_ts: "2026-06-29T05:59:59Z" }), NOW);
 
     expect(result.freshness.degraded).toBe(true);
     expect(result.reason).toBe("missing-degraded-header");
@@ -292,7 +293,7 @@ describe("status-liveness-check hook decisions", () => {
   test("DEGRADED + correct degraded header with no numbers -> no nudge", () => {
     const result = checkStatusLiveness(
       "⚠ Codi DEGRADED · [12:00]\nDone.",
-      baseState({ last_protocol_ts: null }),
+      baseState({ last_protocol_ts: "2026-06-29T05:59:59Z" }),
       NOW,
     );
 
@@ -301,14 +302,15 @@ describe("status-liveness-check hook decisions", () => {
     expect(result.nudge).toBeNull();
   });
 
-  test("missing state is treated as DEGRADED and live header does not nudge", () => {
+  test("missing state is UNKNOWN and a live header can initialize without nudge", () => {
     const result = checkStatusLiveness(
       "📦 Product · 88% · Cal: 96% · [12:00]\nDone.",
       null,
       NOW,
     );
 
-    expect(result.freshness.degraded).toBe(true);
+    expect(result.freshness.unknown).toBe(true);
+    expect(result.freshness.degraded).toBe(false);
     expect(result.header.liveHeader).toBe(true);
     expect(result.reason).toBeNull();
     expect(result.nudge).toBeNull();
@@ -348,7 +350,7 @@ describe("status-liveness-check hook decisions", () => {
     }
   });
 
-  test("state read failure + no header -> missing degraded header nudge", () => {
+  test("state read failure + no header stays quiet because absence is UNKNOWN", () => {
     for (const setupState of [
       (home: string) => writeRawState(home, '{"active":true,"last_score":88,'),
       (_home: string) => {},
@@ -359,7 +361,7 @@ describe("status-liveness-check hook decisions", () => {
       const result = runHookWithAssistant(home, "Done.");
 
       expect(result.exitCode).toBe(0);
-      expect(systemMessageFromStdout(result.stdout)).toContain("codi is DEGRADED");
+      expect(result.stdout).toBe("");
     }
   });
 

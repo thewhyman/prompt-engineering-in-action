@@ -15,8 +15,14 @@ import {
   staleSecsFromEnv,
   stringOr,
 } from "./liveness.ts";
+import {
+  sessionIdFromHookInput,
+  sessionStatePath,
+  workspaceRootFromInput,
+  type SessionAwareHookInput,
+} from "./session-state.ts";
 
-interface HookInput {
+interface HookInput extends SessionAwareHookInput {
   transcript_path?: string;
 }
 
@@ -33,6 +39,7 @@ export interface CodiStatusState {
   version?: unknown;
   last_session_start_ts?: unknown;
   last_protocol_ts?: unknown;
+  last_user_prompt_ts?: unknown;
   growth_total_turns?: unknown;
   [key: string]: unknown;
 }
@@ -40,6 +47,7 @@ export interface CodiStatusState {
 export interface StatusFreshness {
   live: boolean;
   degraded: boolean;
+  unknown: boolean;
   stale: boolean;
   skew: boolean;
   inactive: boolean;
@@ -94,10 +102,13 @@ function homeDir(): string {
   return process.env.HOME?.trim() || homedir();
 }
 
-export function authoritativeStatePath(): string {
-  // Keep this resolution identical to statusline.sh and user-prompt-submit.ts:
-  // brain-kernel workspace first, then legacy machine-local state.
-  const root = process.env.BRAIN_WORKSPACE_ROOT ?? process.env.CAREER_HOME ?? process.cwd();
+export function authoritativeStatePath(input: HookInput = {}): string {
+  const sessionId = sessionIdFromHookInput(input);
+  if (sessionId) return sessionStatePath(sessionId);
+
+  // Backward-compatible no-stdin/no-session path: brain-kernel workspace first,
+  // then legacy machine-local state. There is exactly one write target.
+  const root = workspaceRootFromInput(input);
   const brainPath = join(root, "co-dialectic", "status-state.json");
   if (existsSync(brainPath)) return brainPath;
   return legacyStatePath();
@@ -107,19 +118,21 @@ export function legacyStatePath(): string {
   return join(homeDir(), ".codialectic", "state.json");
 }
 
-function brainStatePath(): string {
-  const root = process.env.BRAIN_WORKSPACE_ROOT ?? process.env.CAREER_HOME ?? process.cwd();
+function brainStatePath(input: HookInput = {}): string {
+  const root = workspaceRootFromInput(input);
   return join(root, "co-dialectic", "status-state.json");
 }
 
-export function resolveStateWriteTargets(): StateWriteTarget[] {
-  const brainPath = brainStatePath();
+export function resolveStateWriteTargets(input: HookInput = {}): StateWriteTarget[] {
+  const sessionId = sessionIdFromHookInput(input);
+  if (sessionId) {
+    return [{ path: sessionStatePath(sessionId), authoritative: true }];
+  }
+
+  const brainPath = brainStatePath(input);
   const brainDir = dirname(brainPath);
   if (existsSync(brainDir)) {
-    return [
-      { path: brainPath, authoritative: true },
-      { path: legacyStatePath(), authoritative: false },
-    ];
+    return [{ path: brainPath, authoritative: true }];
   }
   return [{ path: legacyStatePath(), authoritative: true }];
 }
@@ -141,6 +154,7 @@ export function evaluateStatusFreshness(
   return {
     live: liveness.live,
     degraded: liveness.degraded,
+    unknown: liveness.unknown,
     stale: liveness.stale,
     skew: liveness.skew,
     inactive: liveness.inactive,
@@ -226,6 +240,10 @@ export function checkStatusLiveness(
   let reason: StatusLivenessCheck["reason"] = null;
   if (header.quietFooter) {
     reason = null;
+  } else if (freshness.unknown) {
+    // No session heartbeat is not evidence of failure. A valid header below
+    // will initialize it; absence remains quiet rather than crying wolf.
+    reason = null;
   } else if (!scorePermitted) {
     if (!header.liveHeader && !header.degradedHeader) {
       reason = freshness.degraded ? "missing-degraded-header" : "silent-drop";
@@ -263,10 +281,33 @@ function readExistingStateForWrite(path: string): CodiStatusState | null {
   }
 }
 
-function readBaseStateForWrite(targets: StateWriteTarget[]): CodiStatusState {
+function readBaseStateForWrite(
+  targets: StateWriteTarget[],
+  input: HookInput = {},
+): CodiStatusState {
   for (const target of targets) {
     const state = readExistingStateForWrite(target.path);
     if (state !== null) return state;
+  }
+
+  // First canonical workspace write may bootstrap durable preferences from the
+  // legacy file, but the legacy file is never mirrored afterward.
+  if (targets.some((target) => target.path === brainStatePath(input))) {
+    const legacy = readExistingStateForWrite(legacyStatePath());
+    if (legacy) return legacy;
+  }
+
+  // A new per-session file derives durable preferences from the workspace
+  // canonical state (or legacy bootstrap) without inheriting its heartbeat.
+  if (sessionIdFromHookInput(input)) {
+    const brain = readExistingStateForWrite(brainStatePath(input));
+    const legacy = readExistingStateForWrite(legacyStatePath());
+    const seed = brain ?? legacy;
+    if (seed) {
+      const next = { ...seed };
+      delete next.last_protocol_ts;
+      return next;
+    }
   }
   return {};
 }
@@ -335,21 +376,19 @@ function atomicWriteJson(path: string, value: CodiStatusState): void {
 export function stampProtocolHeartbeat(
   header: RenderedHeader,
   now: Date = new Date(),
-  options: { hookDir?: string; targets?: StateWriteTarget[] } = {},
+  options: { hookDir?: string; targets?: StateWriteTarget[]; input?: HookInput } = {},
 ): void {
   if (!header.liveHeader && !header.degradedHeader && !header.quietFooter) return;
 
-  const targets = options.targets ?? resolveStateWriteTargets();
-  const existing = readBaseStateForWrite(targets);
+  const input = options.input ?? {};
+  const targets = options.targets ?? resolveStateWriteTargets(input);
+  const existing = readBaseStateForWrite(targets, input);
   const version = resolvePluginVersion(existing, options.hookDir);
   const next = buildStampedState(existing, header, now, version);
-  let authoritativeWriteFailed = false;
   for (const target of targets) {
-    if (!target.authoritative && authoritativeWriteFailed) continue;
     try {
       atomicWriteJson(target.path, next);
     } catch {
-      if (target.authoritative) authoritativeWriteFailed = true;
       // Stop hooks fail open: heartbeat writes must never block the session.
     }
   }
@@ -435,13 +474,13 @@ async function main(): Promise<void> {
 
   let state: CodiStatusState | null = null;
   try {
-    state = readState();
+    state = readState(authoritativeStatePath(input));
   } catch {
     state = null;
   }
 
   const result = checkStatusLiveness(message, state);
-  stampProtocolHeartbeat(result.header);
+  stampProtocolHeartbeat(result.header, new Date(), { input });
   if (result.nudge) emitNudge(result.nudge);
   emitSilent();
 }

@@ -19,7 +19,7 @@
  *      IMMEDIATELY. This is the rich path: the skill has Protocol 9 logic,
  *      structured packet schema, workspace-substrate dispatch.
  *   2. CAPTURE layer (belt-and-suspenders) — write a structured JSON packet
- *      to ~/.codialectic/precompact-packet-<timestamp>.json containing what
+ *      to <workspace>/brain/sessions/<session_id>/ containing what
  *      we CAN deterministically capture from the hook context: timestamp,
  *      trigger, cwd, git state (branch, uncommitted files, recent commits),
  *      transcript_path. Even if Claude ignores the reminder, this packet
@@ -39,11 +39,8 @@
 
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
-import { homedir } from "os";
 import { spawnSync } from "child_process";
-
-const CODI_DIR = join(homedir(), ".codialectic");
-const MARKER_FILE = join(CODI_DIR, "last-precompact.json");
+import { safeSessionId } from "./session-state.ts";
 
 interface PreCompactInput {
   hook_event_name?: string;
@@ -51,6 +48,30 @@ interface PreCompactInput {
   trigger?: "manual" | "auto" | string;
   cwd?: string;
   session_id?: string;
+  workspace?: string | {
+    current_dir?: string;
+    project_dir?: string;
+  };
+}
+
+function workspaceRoot(input: PreCompactInput, cwd: string): string {
+  if (typeof input.workspace === "string" && input.workspace.trim()) {
+    return input.workspace.trim();
+  }
+  if (input.workspace && typeof input.workspace === "object") {
+    const projectDir = input.workspace.project_dir?.trim();
+    if (projectDir) return projectDir;
+    const currentDir = input.workspace.current_dir?.trim();
+    if (currentDir) return currentDir;
+  }
+
+  const repoRoot = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+  });
+  if ((repoRoot.status ?? 1) === 0 && repoRoot.stdout?.trim()) {
+    return repoRoot.stdout.trim();
+  }
+  return cwd;
 }
 
 interface GitState {
@@ -133,6 +154,9 @@ async function main(): Promise<void> {
   const transcript = input.transcript_path ?? null;
   const cwd = input.cwd ?? process.cwd();
   const sessionId = input.session_id ?? null;
+  const sessionKey = safeSessionId(sessionId) ?? "unknown-session";
+  const artifactDir = join(workspaceRoot(input, cwd), "brain", "sessions", sessionKey);
+  const markerFile = join(artifactDir, "last-precompact.json");
 
   // ── Layer 2: CAPTURE — structured packet to disk ──────────────────────────
   const gitState = captureGitState(cwd);
@@ -163,8 +187,8 @@ async function main(): Promise<void> {
 
   let packetFile: string | null = null;
   try {
-    if (!existsSync(CODI_DIR)) mkdirSync(CODI_DIR, { recursive: true });
-    packetFile = join(CODI_DIR, `precompact-packet-${tsCompact}.json`);
+    if (!existsSync(artifactDir)) mkdirSync(artifactDir, { recursive: true });
+    packetFile = join(artifactDir, `precompact-packet-${sessionKey}-${tsCompact}.json`);
     writeFileSync(packetFile, JSON.stringify(packet, null, 2));
   } catch (e) {
     process.stderr.write(`precompact-handoff: packet write failed: ${e}\n`);
@@ -172,9 +196,9 @@ async function main(): Promise<void> {
 
   // Marker file (latest-only) for easy discovery by post-compact Claude
   try {
-    if (!existsSync(CODI_DIR)) mkdirSync(CODI_DIR, { recursive: true });
+    if (!existsSync(artifactDir)) mkdirSync(artifactDir, { recursive: true });
     writeFileSync(
-      MARKER_FILE,
+      markerFile,
       JSON.stringify(
         {
           ts: now,
@@ -226,7 +250,7 @@ async function main(): Promise<void> {
       ? "⚠ NEXT_SESSION_HANDOFF.md is uncommitted — may indicate in-flight handoff work."
       : "",
     "",
-    `Marker: ${MARKER_FILE} (post-compact Claude can read this to verify).`,
+    `Marker: ${markerFile} (post-compact Claude can read this to verify).`,
     "Reference: codi-handoff skill at ~/.claude/skills/handoff/SKILL.md.",
     "━━━ END PRE-COMPACT TRIGGER ━━━",
   ]

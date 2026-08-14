@@ -199,7 +199,7 @@ describe("XOS-198 deterministic heartbeat writer", () => {
     expect(missingDegraded.nudge).toContain("codi is DEGRADED");
   });
 
-  test("valid live header stamps brain and legacy, preserves preferences, and increments across turns", () => {
+  test("valid live header stamps only authoritative brain state, preserves preferences, and increments", () => {
     const home = makeTempDir("codi-xos-198-home-");
     const workspace = makeTempDir("codi-xos-198-workspace-");
     writeBrainState(workspace, baseState());
@@ -215,19 +215,21 @@ describe("XOS-198 deterministic heartbeat writer", () => {
 
     const brain = readJson(brainPath(workspace));
     const legacy = readJson(legacyPath(home));
-    for (const stamped of [brain, legacy]) {
-      expectFreshIso(stamped.last_protocol_ts, before, after);
-      expect(stamped.persona).toBe("Product (Doshi)");
-      expect(stamped.persona_icon).toBe("📦");
-      expect(stamped.last_score).toBe(88);
-      expect(stamped.last_cal).toBe(96);
-      expect(stamped.version).toBe(pluginVersion());
-      expect(stamped.growth_total_turns).toBe(8);
-      expect(stamped.mode).toBe("cruise");
-      expect(stamped.verbosity).toBe("verbose");
-      expect(stamped.wildcard).toBe(true);
-      expect(stamped.active).toBe(true);
-    }
+    expectFreshIso(brain.last_protocol_ts, before, after);
+    expect(brain.persona).toBe("Product (Doshi)");
+    expect(brain.persona_icon).toBe("📦");
+    expect(brain.last_score).toBe(88);
+    expect(brain.last_cal).toBe(96);
+    expect(brain.version).toBe(pluginVersion());
+    expect(brain.growth_total_turns).toBe(8);
+    expect(brain.mode).toBe("cruise");
+    expect(brain.verbosity).toBe("verbose");
+    expect(brain.wildcard).toBe(true);
+    expect(brain.active).toBe(true);
+    expect(legacy.growth_total_turns).toBe(7);
+    expect(legacy.persona).toBe("Product");
+    expect(legacy.last_score).toBe(88);
+    expect(Date.parse(legacy.last_protocol_ts as string)).toBeLessThan(before);
 
     const second = runHook(home, workspace, "📦 Product (Doshi) · 89% · Cal: 97% · [12:01]\nDone.");
     expect(second.exitCode).toBe(0);
@@ -431,25 +433,28 @@ describe("XOS-198 deterministic heartbeat writer", () => {
     expect(result.stdout).toBe("");
     const brain = readJson(brainPath(workspace));
     const legacy = readJson(legacyPath(home));
-    expect(brain).toEqual(legacy);
     expect(brain.growth_total_turns).toBe(8);
     expect(brain.mode).toBe("cruise");
     expect(brain.verbosity).toBe("verbose");
     expect(brain.wildcard).toBe(true);
     expect(brain.last_score).toBe(90);
     expect(brain.last_cal).toBe(94);
+    expect(legacy.growth_total_turns).toBe(7);
+    expect(legacy.last_score).toBe(88);
   });
 
-  test("read fallback legacy path matches write legacy target", () => {
+  test("workspace canonical target replaces the legacy mirror", () => {
     const home = makeTempDir("codi-xos-198-home-");
     const workspace = makeTempDir("codi-xos-198-workspace-");
     mkdirSync(dirname(brainPath(workspace)), { recursive: true });
 
     withEnv({ HOME: home, BRAIN_WORKSPACE_ROOT: workspace, CAREER_HOME: "" }, () => {
-      const legacyTarget = resolveStateWriteTargets().find((target) => !target.authoritative);
-      expect(legacyTarget?.path).toBe(legacyStatePath());
-      expect(authoritativeStatePath()).toBe(legacyTarget?.path);
-      expect(legacyTarget?.path).toBe(legacyPath(home));
+      const targets = resolveStateWriteTargets();
+      expect(targets).toHaveLength(1);
+      expect(targets[0]?.path).toBe(brainPath(workspace));
+      expect(targets[0]?.authoritative).toBe(true);
+      expect(authoritativeStatePath()).toBe(legacyStatePath());
+      expect(legacyStatePath()).toBe(legacyPath(home));
     });
   });
 
