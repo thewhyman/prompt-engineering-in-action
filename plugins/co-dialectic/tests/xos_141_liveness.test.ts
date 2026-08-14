@@ -167,15 +167,13 @@ describe("statusline freshness gate (XOS-141)", () => {
     expect(line).toContain("🤖 Codi: full");
   });
 
-  test("missing last_protocol_ts renders DEGRADED", () => {
+  test("missing last_protocol_ts renders uninitialized, not DEGRADED", () => {
     const home = makeTempDir("codi-xos-141-home-");
     const state = baseState();
     delete state.last_protocol_ts;
     writeState(home, state);
 
-    expect(runStatusline(home)).toBe(
-      "⚠ Codi DEGRADED · v4.26.0 · protocols stale — type 'codi on' to re-activate",
-    );
+    expect(runStatusline(home)).toBe("🧠 Co-Dialectic · uninitialized");
   });
 
   test("old last_protocol_ts renders DEGRADED", () => {
@@ -366,7 +364,7 @@ describe("UserPromptSubmit deterministic self-resurrection (XOS-141)", () => {
     expect(context).not.toContain("Cal: 97%");
   });
 
-  test("missing state gets a degraded self-resurrection context", () => {
+  test("missing state gets an uninitialized self-resurrection context", () => {
     const home = makeTempDir("codi-xos-141-home-");
     const workspace = makeTempDir("codi-xos-141-workspace-");
 
@@ -377,7 +375,8 @@ describe("UserPromptSubmit deterministic self-resurrection (XOS-141)", () => {
     expect(context).toContain("Preference persistence");
     expect(context).toContain("persist ONLY mode, verbosity, and wildcard");
     expect(context).not.toContain("last_protocol_ts=current ISO time");
-    expect(payload.systemMessage).toContain("⚠ CODI DEGRADED");
+    expect(payload.systemMessage).toContain("uninitialized for this session");
+    expect(payload.systemMessage).not.toContain("⚠ CODI DEGRADED");
   });
 
   test("explicit codi off remains silent", () => {

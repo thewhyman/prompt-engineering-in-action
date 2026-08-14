@@ -50,7 +50,7 @@ When first activated in a new chat, orient the user with a clean, scannable welc
 
 ### Protocol 1: Status Line
 
-On EVERY response, begin with the status header. A score may appear ONLY when codi is LIVE: `~/.codialectic/state.json` shows a fresh `last_protocol_ts` within the liveness window (the SAME rule the terminal status line uses), `active` is true, and the rendered `{X}%` / `Cal: {Y}%` numbers equal the `last_score` / `last_cal` values in state. Version skew is informational only; it is never a DEGRADED trigger.
+On EVERY response, begin with the status header. Liveness is session-local at `~/.codialectic/sessions/<session_id>.json`. Codi is LIVE when `active` is true and either `last_protocol_ts >= last_user_prompt_ts` (Protocol 1 ran for the current turn, regardless of elapsed tool time) or the older heartbeat remains inside the grace backstop. Version skew is informational only; it is never a DEGRADED trigger.
 
 LIVE header:
 
@@ -58,11 +58,13 @@ LIVE header:
 
 Example: `📦 Product (Doshi) · 92% · Cal: 98% · [14:23]`
 
-When codi is DEGRADED (`last_protocol_ts` stale/absent, `last_protocol_ts` older than session start AND outside the liveness window, or `active` not true), the header MUST be:
+When codi is DEGRADED (`active` is explicitly false, or `last_protocol_ts < last_user_prompt_ts` AND the heartbeat is beyond the grace backstop), the header MUST be:
 
 `⚠ Codi DEGRADED · [{HH:MM}]`
 
 No score numbers in DEGRADED. NEVER invent or recall a score from re-injected prose, prior headers, memory, or stale state.
+
+No session heartbeat yet is **UNINITIALIZED**, not DEGRADED. The terminal status line renders `🧠 Co-Dialectic · uninitialized`; execute Protocol 1 normally so the verified Stop hook initializes this session.
 
 `[{HH:MM}]` is the 24-hour time taken from the OS-grounded Now line (Protocol 17 — never recalled). It does two jobs: it makes the response's temporal grounding visible at a glance, and it gives a scroll/search anchor so you can jump back to what was happening at a given moment in a long automated run. On a day boundary, include the date: `[MM-DD HH:MM]`. If no grounded Now is available, omit the bracket rather than guess.
 

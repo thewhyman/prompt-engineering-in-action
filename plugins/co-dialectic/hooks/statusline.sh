@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # statusline.sh — Co-Dialectic persistent status line for Claude Code.
 #
-# Reads ~/.codialectic/state.json and renders a compact one-line status.
+# Reads Claude Code's statusLine JSON from stdin, then renders the CURRENT
+# session's state from ~/.codialectic/sessions/<session_id>.json.
 # Wired in ~/.claude/settings.json via the `statusLine` setting.
 #
 # Output format (single line):
@@ -13,29 +14,79 @@
 #                wildcard, active
 #
 # Never render model-owned score/cal fields unless last_protocol_ts proves that
-# Protocol 1/3 executed in this session and within CODI_STALE_SECS.
+# Protocol 1/3 executed for the current turn. CODI_STALE_SECS is only a generous
+# backstop while the heartbeat still predates the latest user prompt.
 #
 # Falls back to bare "🧠 Co-Dialectic active" if state.json is unparseable.
 
 set -u
 
-# XOS-167: unify the state source with the survival hook (user-prompt-submit.ts),
-# which reads the brain-kernel path FIRST (BRAIN_WORKSPACE_ROOT > CAREER_HOME > cwd)
-# and falls back to the legacy machine-local path. The statusline previously read
-# ONLY the legacy path, so a single heartbeat left one surface stale (split-brain).
-# Reading the same path the hook reads makes ONE heartbeat keep BOTH surfaces green.
-LEGACY_STATE_PATH="${HOME}/.codialectic/state.json"
-BRAIN_ROOT="${BRAIN_WORKSPACE_ROOT:-${CAREER_HOME:-$PWD}}"
+# XOS-237: statusLine receives session_id/cwd/workspace on stdin. A valid session
+# id is a hard boundary: never fall back to another session's global heartbeat.
+# Empty/unparseable stdin keeps the pre-XOS-237 brain-first/global fallback.
+CODI_DIR="${CODI_STATE_DIR:-${HOME}/.codialectic}"
+LEGACY_STATE_PATH="${CODI_DIR}/state.json"
+STATUS_INPUT=""
+if [ ! -t 0 ]; then
+  IFS= read -r STATUS_INPUT || true
+fi
+
+SESSION_ID=""
+PAYLOAD_WORKSPACE=""
+PAYLOAD_VALID=false
+if [ -n "$STATUS_INPUT" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    PAYLOAD_FIELDS=$(printf '%s' "$STATUS_INPUT" | jq -er '
+      if type != "object" then error("not an object") else [
+        (.session_id // .sessionId // "_"),
+        ((if (.workspace | type) == "object" then
+            (.workspace.project_dir // .workspace.current_dir)
+          elif (.workspace | type) == "string" then .workspace
+          else null end) //
+          .cwd // "_")
+      ] | @tsv end' 2>/dev/null) && PAYLOAD_VALID=true || true
+  elif command -v python3 >/dev/null 2>&1; then
+    PAYLOAD_FIELDS=$(STATUS_INPUT="$STATUS_INPUT" python3 - <<'PYEOF' 2>/dev/null
+import json
+import os
+
+d = json.loads(os.environ.get("STATUS_INPUT", ""))
+if not isinstance(d, dict):
+    raise SystemExit(1)
+workspace = d.get("workspace")
+workspace_path = None
+if isinstance(workspace, dict):
+    workspace_path = workspace.get("project_dir") or workspace.get("current_dir")
+elif isinstance(workspace, str):
+    workspace_path = workspace
+print("\t".join([str(d.get("session_id") or d.get("sessionId") or "_"), str(workspace_path or d.get("cwd") or "_")]))
+PYEOF
+    ) && PAYLOAD_VALID=true || true
+  fi
+fi
+
+if [ "$PAYLOAD_VALID" = "true" ]; then
+  IFS=$'\t' read -r SESSION_ID PAYLOAD_WORKSPACE <<< "$PAYLOAD_FIELDS"
+  [ "$SESSION_ID" = "_" ] && SESSION_ID=""
+  [ "$PAYLOAD_WORKSPACE" = "_" ] && PAYLOAD_WORKSPACE=""
+  case "$SESSION_ID" in
+    *[!A-Za-z0-9._-]*|""|.|..) SESSION_ID="" ;;
+  esac
+fi
+
+BRAIN_ROOT="${BRAIN_WORKSPACE_ROOT:-${PAYLOAD_WORKSPACE:-${CAREER_HOME:-$PWD}}}"
 BRAIN_STATE_PATH="${BRAIN_ROOT}/co-dialectic/status-state.json"
-if [ -f "$BRAIN_STATE_PATH" ]; then
+if [ -n "$SESSION_ID" ]; then
+  STATE_PATH="${CODI_DIR}/sessions/${SESSION_ID}.json"
+elif [ -f "$BRAIN_STATE_PATH" ]; then
   STATE_PATH="$BRAIN_STATE_PATH"
 else
   STATE_PATH="$LEGACY_STATE_PATH"
 fi
-STALE_SECS="${CODI_STALE_SECS:-900}"
+STALE_SECS="${CODI_STALE_SECS:-21600}"
 
 if [ ! -f "$STATE_PATH" ]; then
-  echo "🧠 Co-Dialectic · not initialized"
+  echo "🧠 Co-Dialectic · uninitialized"
   exit 0
 fi
 
@@ -81,7 +132,7 @@ PYEOF
 # Use jq if available; fall back to python3
 if command -v jq >/dev/null 2>&1; then
   STATE_FIELDS=$(jq -r '[
-    (.active // false),
+    (if has("active") then .active else "_" end),
     (.mode // "drive"),
     (.persona // "_"),
     (.persona_icon // "_"),
@@ -92,21 +143,22 @@ if command -v jq >/dev/null 2>&1; then
     (.installed_version // "unknown"),
     (.version // "_"),
     (.last_session_start_ts // "_"),
-    (.last_protocol_ts // "_")
+    (.last_protocol_ts // "_"),
+    (.last_user_prompt_ts // "_")
   ] | @tsv' "$STATE_PATH" 2>/dev/null) || {
     echo "🧠 Co-Dialectic active"
     exit 0
   }
-  IFS=$'\t' read -r ACTIVE MODE PERSONA PERSONA_ICON LAST_SCORE LAST_CAL HONESTY WILDCARD INSTALLED_VERSION STATE_VERSION LAST_SESSION_START_TS LAST_PROTOCOL_TS <<< "$STATE_FIELDS"
+  IFS=$'\t' read -r ACTIVE MODE PERSONA PERSONA_ICON LAST_SCORE LAST_CAL HONESTY WILDCARD INSTALLED_VERSION STATE_VERSION LAST_SESSION_START_TS LAST_PROTOCOL_TS LAST_USER_PROMPT_TS <<< "$STATE_FIELDS"
 elif command -v python3 >/dev/null 2>&1; then
-  IFS=$'\t' read -r ACTIVE MODE PERSONA PERSONA_ICON LAST_SCORE LAST_CAL HONESTY WILDCARD INSTALLED_VERSION STATE_VERSION LAST_SESSION_START_TS LAST_PROTOCOL_TS < <(STATE_PATH="$STATE_PATH" python3 - <<'PYEOF'
+  IFS=$'\t' read -r ACTIVE MODE PERSONA PERSONA_ICON LAST_SCORE LAST_CAL HONESTY WILDCARD INSTALLED_VERSION STATE_VERSION LAST_SESSION_START_TS LAST_PROTOCOL_TS LAST_USER_PROMPT_TS < <(STATE_PATH="$STATE_PATH" python3 - <<'PYEOF'
 import json
 import os
 try:
     with open(os.environ['STATE_PATH']) as f:
         d = json.load(f)
     fields = [
-        d.get('active', False),
+        d.get('active') if d.get('active') is not None else '_',
         d.get('mode', 'drive'),
         d.get('persona') or '_',
         d.get('persona_icon') or '_',
@@ -118,6 +170,7 @@ try:
         d.get('version') or '_',
         d.get('last_session_start_ts') or '_',
         d.get('last_protocol_ts') or '_',
+        d.get('last_user_prompt_ts') or '_',
     ]
     print('\t'.join(str(v) for v in fields))
 except Exception:
@@ -140,28 +193,37 @@ fi
 [ "$STATE_VERSION" = "_" ] && STATE_VERSION=""
 [ "$LAST_SESSION_START_TS" = "_" ] && LAST_SESSION_START_TS=""
 [ "$LAST_PROTOCOL_TS" = "_" ] && LAST_PROTOCOL_TS=""
+[ "$LAST_USER_PROMPT_TS" = "_" ] && LAST_USER_PROMPT_TS=""
 
 NOW_EPOCH=$(date -u +%s)
 SESSION_EPOCH=$(iso_to_epoch "$LAST_SESSION_START_TS")
 PROTOCOL_EPOCH=$(iso_to_epoch "$LAST_PROTOCOL_TS")
+PROMPT_EPOCH=$(iso_to_epoch "$LAST_USER_PROMPT_TS")
 
 STALE=false
+UNKNOWN=false
 if [ "$PROTOCOL_EPOCH" -le 0 ]; then
-  STALE=true
+  UNKNOWN=true
 else
   PROTOCOL_AGE=$((NOW_EPOCH - PROTOCOL_EPOCH))
 fi
 
-# Keep this predicate in sync with hooks/liveness.ts. XOS-197: a fresh
-# heartbeat is LIVE even if a reload/login SessionStart re-stamped
-# last_session_start_ts after that heartbeat. protocol-before-session is stale
-# only when the heartbeat is also older than the stale window.
-if [ "$STALE" = "false" ] && \
+# Keep this predicate in sync with hooks/liveness.ts. Current-turn proof wins
+# over elapsed wall time. XOS-197's SessionStart grace remains the legacy path.
+if [ "$UNKNOWN" = "false" ] && \
+   [ "$PROMPT_EPOCH" -gt 0 ] && \
+   [ "$PROTOCOL_EPOCH" -lt "$PROMPT_EPOCH" ] && \
+   [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
+  STALE=true
+elif [ "$UNKNOWN" = "false" ] && \
+   [ "$PROMPT_EPOCH" -le 0 ] && \
    [ "$SESSION_EPOCH" -gt 0 ] && \
    [ "$PROTOCOL_EPOCH" -lt "$SESSION_EPOCH" ] && \
    [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
   STALE=true
-elif [ "$STALE" = "false" ] && [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
+elif [ "$UNKNOWN" = "false" ] && \
+     [ "$PROMPT_EPOCH" -le 0 ] && \
+     [ "$PROTOCOL_AGE" -gt "$STALE_SECS" ]; then
   STALE=true
 fi
 
@@ -169,9 +231,13 @@ fi
 # vs `INSTALLED_VERSION` (hook-derived) are decoupled sources that falsely skew under
 # cache-sprawl / 'unknown' detection → permanent false DEGRADED. DEGRADED = real
 # liveness loss only: inactive OR stale protocol.
-if [ "$ACTIVE" != "true" ] && [ "$ACTIVE" != "True" ] || \
-   [ "$STALE" = "true" ]; then
+if { [ "$ACTIVE" = "false" ] || [ "$ACTIVE" = "False" ]; } || [ "$STALE" = "true" ]; then
   echo "⚠ Codi DEGRADED · v${INSTALLED_VERSION} · protocols stale — type 'codi on' to re-activate"
+  exit 0
+fi
+
+if [ "$UNKNOWN" = "true" ]; then
+  echo "🧠 Co-Dialectic · uninitialized"
   exit 0
 fi
 

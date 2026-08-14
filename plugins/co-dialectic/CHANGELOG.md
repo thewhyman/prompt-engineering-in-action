@@ -1,5 +1,13 @@
 # Changelog — Co-Dialectic
 
+## [4.39.0] — 2026-08-14 — XOS-237: session-scoped, turn-relative liveness
+
+- `statusline.sh` now reads Claude Code status-line stdin and selects `~/.codialectic/sessions/<session_id>.json`; one profile/session can no longer green or degrade another.
+- Liveness is turn-relative: a heartbeat at or after `last_user_prompt_ts` stays LIVE regardless of elapsed tool time. Only a heartbeat that predates the prompt beyond the overridable backstop is stale; the default backstop is now 21,600 seconds (6 hours).
+- Missing session evidence renders `🧠 Co-Dialectic · uninitialized`, not DEGRADED. Empty or malformed stdin keeps the legacy brain-first/global fallback for older Claude Code and manual invocations.
+- Workspace `co-dialectic/status-state.json` is the canonical durable preference/config state. `~/.codialectic/state.json` is legacy read/bootstrap fallback only; heartbeat writes are no longer mirrored between them.
+- New precompact packets and their latest marker now land at `<workspace>/brain/sessions/<session_id>/`; existing global packets are intentionally left untouched.
+
 ## [4.38.0] — 2026-07-05 — Single-key sharpen select (I/S/D) + canonical `codi` prefix
 
 - Concise-mode sharpen offer is now `Sharpen? Reply I / S / D → IMPROVED / SOCRATIC / DIALECTIC (or 'codi sharpen' for all three).` A bare `I`/`S`/`D` (case-insensitive, trimmed) immediately after the offer picks that ONE tier — lowest input tax. Context-gated: only interpreted as a sharpen-select right after the offer, so a literal single-letter answer to another question is never hijacked. `codi sharpen` still renders all three.
