@@ -1,7 +1,7 @@
 {
   "name": "co-dialectic",
   "description": "Co-Dialectic v4.39.0 - Per-session, turn-relative Protocol-1 liveness; workspace-scoped precompact packets.",
-  "version": "4.39.0",
+  "version": "4.40.0",
   "depends_on_kernel": [
     "brain-kernel >= 1.0.0",
     "co-dialectic >= 4.16.0"

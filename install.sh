@@ -6,7 +6,7 @@
 set -e
 
 REPO="https://raw.githubusercontent.com/Exponential-OS/prompt-engineering-in-action/main"
-VERSION="4.38.0"
+VERSION="4.40.0"
 CONFIG_DIR="$HOME/.co-dialectic"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 TARGET_ARG="auto"
