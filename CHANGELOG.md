@@ -6,6 +6,15 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.40.0] - 2026-08-16
+
+- XOS-213: one liveness rule, mechanically enforced. `statusline.sh` no longer reimplements the freshness predicate by hand; a shared fixture table (`hooks/liveness-fixtures.ts`) drives the canonical evaluator, the `user-prompt-submit` path and `statusline.sh` itself, and the suite fails if any two disagree. Fixed two real divergences on the `active` field, unifying on the tolerant `boolean-or-string` reading so a legacy string cannot manufacture a false DEGRADED.
+- Version consistency repaired: `marketplace.json`, `SKILL.md` and `install.sh` had been left at 4.38.0 when 4.39.0 shipped, so the four version sources disagreed on main.
+
+## [4.39.0] - 2026-08-14
+
+- XOS-237: session-scoped, turn-relative liveness. `statusline.sh` reads status-line stdin and selects `~/.codialectic/sessions/<session_id>.json`; a heartbeat at or after `last_user_prompt_ts` stays LIVE regardless of elapsed tool time; missing evidence renders uninitialized rather than DEGRADED. (Entry added retroactively in 4.40.0 — the 4.39.0 release did not update this file.)
+
 ## [4.38.0] - 2026-07-05
 
 - co-dialectic: single-key sharpen select (I/S/D, context-gated) + canonical `codi` command prefix in the Protocol-3 concise offer and reminder toggles.
