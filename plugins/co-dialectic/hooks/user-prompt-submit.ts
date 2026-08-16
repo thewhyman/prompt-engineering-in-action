@@ -198,7 +198,13 @@ export function evaluateCodiLiveness(
     installedVersion,
     now,
     staleSecs,
-    "boolean-only",
+    // XOS-213: unified on the tolerant reading. This path used "boolean-only"
+    // while status-liveness-check.ts used "boolean-or-string" and statusline.sh
+    // degraded only on a literal "false" — three readings of one field. A legacy
+    // or hand-edited state carrying the STRING "true" manufactured a DEGRADED
+    // here and nowhere else, which is precisely the false-alarm class XOS-237
+    // was filed for. Pinned by xos-213-liveness-parity.test.ts.
+    "boolean-or-string",
   );
 
   return {

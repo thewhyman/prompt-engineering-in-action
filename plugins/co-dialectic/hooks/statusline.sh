@@ -208,8 +208,12 @@ else
   PROTOCOL_AGE=$((NOW_EPOCH - PROTOCOL_EPOCH))
 fi
 
-# Keep this predicate in sync with hooks/liveness.ts. Current-turn proof wins
-# over elapsed wall time. XOS-197's SessionStart grace remains the legacy path.
+# This predicate mirrors evaluateSharedLiveness in hooks/liveness.ts. It is NOT
+# kept in sync by hand — hooks/xos-213-liveness-parity.test.ts drives this script
+# and both TypeScript paths over one shared fixture table and fails if any two
+# disagree. Add a case to hooks/liveness-fixtures.ts and every implementation is
+# held to it. Current-turn proof wins over elapsed wall time; XOS-197's
+# SessionStart grace remains the legacy path.
 if [ "$UNKNOWN" = "false" ] && \
    [ "$PROMPT_EPOCH" -gt 0 ] && \
    [ "$PROTOCOL_EPOCH" -lt "$PROMPT_EPOCH" ] && \
@@ -231,7 +235,17 @@ fi
 # vs `INSTALLED_VERSION` (hook-derived) are decoupled sources that falsely skew under
 # cache-sprawl / 'unknown' detection → permanent false DEGRADED. DEGRADED = real
 # liveness loss only: inactive OR stale protocol.
-if { [ "$ACTIVE" = "false" ] || [ "$ACTIVE" = "False" ]; } || [ "$STALE" = "true" ]; then
+# XOS-213: match evaluateSharedLiveness's "boolean-or-string" policy exactly.
+# This previously degraded ONLY on the literal "false"/"False", so a corrupt
+# state (active:0, active:"yes") rendered as healthy while the TypeScript
+# evaluator called it inactive. Absent evidence ("_") is NOT inactivity — a new
+# session has not failed a protocol yet.
+INACTIVE=false
+if [ "$ACTIVE" != "_" ] && [ "$ACTIVE" != "true" ] && [ "$ACTIVE" != "True" ]; then
+  INACTIVE=true
+fi
+
+if [ "$INACTIVE" = "true" ] || [ "$STALE" = "true" ]; then
   echo "⚠ Codi DEGRADED · v${INSTALLED_VERSION} · protocols stale — type 'codi on' to re-activate"
   exit 0
 fi

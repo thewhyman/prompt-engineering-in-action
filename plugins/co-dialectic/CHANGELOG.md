@@ -1,5 +1,13 @@
 # Changelog — Co-Dialectic
 
+## [4.40.0] — 2026-08-16 — XOS-213: one liveness rule, mechanically enforced across every implementation
+
+- Liveness was decided in three places that disagreed on the same input. `statusline.sh` carried the comment *"Keep this predicate in sync with hooks/liveness.ts"* — a hand-maintained contract, which is the drift hazard itself.
+- Two real divergences were found and fixed, both on the `active` field: state carrying the STRING `"true"` was DEGRADED by `user-prompt-submit.ts` (`boolean-only`) while `status-liveness-check.ts` (`boolean-or-string`) and `statusline.sh` called it LIVE; and corrupt state such as `active: 0` rendered LIVE in `statusline.sh`, which tested only for the literal `"false"`, while the TypeScript evaluator called it inactive.
+- Unified on the tolerant `boolean-or-string` reading. A legacy or hand-edited string must not manufacture a false DEGRADED — the exact false-alarm class XOS-237 was filed for.
+- New `hooks/liveness-fixtures.ts` is the shared truth table, and `hooks/xos-213-liveness-parity.test.ts` drives the canonical evaluator, the `user-prompt-submit` path, and `statusline.sh` (executed for real, in an isolated state dir, with session id on stdin) over every case, failing if any two disagree. Adding a fixture now holds every implementation to it.
+- The harness is mutation-proved: reverting `boolean-only`, restoring the literal-`"false"` shell check, regressing the XOS-237 turn-relative branch, and breaking uninitialized detection were each applied and each turned the suite red.
+
 ## [4.39.0] — 2026-08-14 — XOS-237: session-scoped, turn-relative liveness
 
 - `statusline.sh` now reads Claude Code status-line stdin and selects `~/.codialectic/sessions/<session_id>.json`; one profile/session can no longer green or degrade another.
