@@ -6,7 +6,7 @@
 set -e
 
 REPO="https://raw.githubusercontent.com/Exponential-OS/prompt-engineering-in-action/main"
-VERSION="4.41.1"
+VERSION="4.42.0"
 CONFIG_DIR="$HOME/.co-dialectic"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 TARGET_ARG="auto"
@@ -52,6 +52,94 @@ fetch_repo_file() {
                 return 1
                 ;;
         esac
+    fi
+}
+
+plugin_skill_source() {
+    # Bare skills shadow plugin skills, so copies must come from the exact
+    # installed plugin version rather than remote main whenever possible.
+    local marketplace="$1"
+    local plugin="$2"
+    local skill="$3"
+    local cache_root="$HOME/.claude/plugins/cache/$marketplace/$plugin"
+    local version_dir version_name newest_version source_path
+
+    [ -d "$cache_root" ] || return 1
+    newest_version=$(
+        for version_dir in "$cache_root"/*; do
+            [ -d "$version_dir" ] || continue
+            version_name="${version_dir##*/}"
+            if printf '%s\n' "$version_name" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                printf '%s\n' "$version_name"
+            fi
+        done | sort -V | tail -n 1
+    )
+    [ -n "$newest_version" ] || return 1
+
+    source_path="$cache_root/$newest_version/skills/$skill/SKILL.md"
+    [ -f "$source_path" ] || return 1
+    printf '%s\n' "$source_path"
+}
+
+assert_skill_version_matches() {
+    # The bare naming-collision copy wins resolution over the plugin, so make
+    # otherwise-invisible version skew loud without blocking installation.
+    local bare_skill="$1"
+    local plugin_json="$2"
+    local bare_version plugin_version
+
+    [ -f "$bare_skill" ] || return 0
+    [ -f "$plugin_json" ] || return 0
+
+    bare_version=$(awk '/^\*\*Version:\*\*[[:space:]]+/ { print $2; exit }' "$bare_skill" 2>/dev/null || true)
+    plugin_version=$(awk -F'"' '/"version"[[:space:]]*:/ { for (i = 1; i <= NF; i++) if ($i == "version") { print $(i + 2); exit } }' "$plugin_json" 2>/dev/null || true)
+    [ -n "$bare_version" ] || return 0
+    [ -n "$plugin_version" ] || return 0
+
+    if [ "$bare_version" != "$plugin_version" ]; then
+        echo "   🚨 WARNING: bare skill is version $bare_version, installed plugin is version $plugin_version; the bare copy shadows the plugin."
+    fi
+}
+
+prune_plugin_skill_shadows() {
+    # Plugin-managed skills must not retain older standalone bare copies. Move
+    # them aside instead of deleting them so every prior install is recoverable.
+    local marketplace="$1"
+    local plugin="$2"
+    local source_skill="$3"
+    local plugin_skill plugin_root shipped_dir skill bare_dir
+    local timestamp quarantine_base quarantine_dir suffix
+    local pruned=0
+
+    if ! plugin_skill=$(plugin_skill_source "$marketplace" "$plugin" "$source_skill"); then
+        return 0
+    fi
+    plugin_root="${plugin_skill%/skills/$source_skill/SKILL.md}"
+
+    for shipped_dir in "$plugin_root"/skills/*; do
+        [ -f "$shipped_dir/SKILL.md" ] || continue
+        skill="${shipped_dir##*/}"
+        [ "$skill" = "co-dialectic" ] && continue
+        bare_dir="$HOME/.claude/skills/$skill"
+        [ -d "$bare_dir" ] || continue
+
+        if [ "$pruned" -eq 0 ]; then
+            timestamp=$(date -u '+%Y%m%dT%H%M%SZ')
+            quarantine_base="$HOME/.claude/skills/_shadowed-$timestamp"
+            quarantine_dir="$quarantine_base"
+            suffix=1
+            while [ -e "$quarantine_dir" ]; do
+                quarantine_dir="$quarantine_base-$suffix"
+                suffix=$(( suffix + 1 ))
+            done
+            mkdir -p "$quarantine_dir"
+        fi
+        mv "$bare_dir" "$quarantine_dir/"
+        pruned=$(( pruned + 1 ))
+    done
+
+    if [ "$pruned" -gt 0 ]; then
+        echo "   ⚠️  Moved $pruned stale plugin skill shadow(s) to $quarantine_dir/"
     fi
 }
 
@@ -765,12 +853,37 @@ if [ -d "$HOME/.claude" ] || command -v claude > /dev/null 2>&1; then
                 # the plugin itself (naming collision). Install the main skill
                 # directly so `codi on` resolves correctly.
                 mkdir -p "$HOME/.claude/skills/co-dialectic"
-                if fetch_repo_file "$REPO/plugins/co-dialectic/skills/co-dialectic/SKILL.md" \
-                        "$HOME/.claude/skills/co-dialectic/SKILL.md"; then
+                _plugin_skill_source=""
+                if _plugin_skill_source=$(plugin_skill_source xos co-dialectic co-dialectic); then
+                    _main_skill_installed=false
+                    if cp "$_plugin_skill_source" "$HOME/.claude/skills/co-dialectic/SKILL.md"; then
+                        _main_skill_installed=true
+                    fi
+                else
+                    echo "   ⚠️  Installed plugin cache not found; falling back to remote main for the co-dialectic skill"
+                    _main_skill_installed=false
+                    if fetch_repo_file "$REPO/plugins/co-dialectic/skills/co-dialectic/SKILL.md" \
+                            "$HOME/.claude/skills/co-dialectic/SKILL.md"; then
+                        _main_skill_installed=true
+                    fi
+                fi
+                if [ "$_main_skill_installed" = true ]; then
                     echo "   ✅ co-dialectic skill registered at ~/.claude/skills/"
                 else
                     echo "   ⚠️  Could not fetch main skill file — run installer again to retry"
                 fi
+                if [ -n "$_plugin_skill_source" ]; then
+                    # <version-dir>/skills/<skill>/SKILL.md -> <version-dir>.
+                    # Walk up rather than stripping a literal suffix: the literal
+                    # spells the skill name a second time (so a rename silently
+                    # stops matching), and it trips test-plugin.sh's stale-path
+                    # guard, which looks for exactly this shape.
+                    _plugin_root="$(dirname "$(dirname "$(dirname "$_plugin_skill_source")")")"
+                    assert_skill_version_matches \
+                        "$HOME/.claude/skills/co-dialectic/SKILL.md" \
+                        "$_plugin_root/.claude-plugin/plugin.json"
+                fi
+                prune_plugin_skill_shadows xos co-dialectic co-dialectic
                 # Fish gate: download handler.ts + adapter and wire the PreToolUse hook
                 echo "   ⬇️  Installing fish gate (pre-task approach checker)..."
                 if install_fish_gate; then

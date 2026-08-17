@@ -29,3 +29,6 @@ jobs:
 
       - name: Full install smoke test (install.sh in temp HOME)
         run: bash test-plugin.sh --smoke-install
+
+      - name: install.sh — bare copy sourced from the installed plugin
+        run: bash tests/test-install-shadow-source.sh
