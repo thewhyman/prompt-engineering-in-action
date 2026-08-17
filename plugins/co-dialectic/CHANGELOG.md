@@ -1,5 +1,12 @@
 # Changelog — Co-Dialectic
 
+## [4.41.1] — 2026-08-17 — the validator no longer corrupts the marketplace catalog it checks
+
+- `test-plugin.sh` check 15 auto-syncs co-dialectic's version into `~/aiprojects/agent-marketplace/.claude-plugin/marketplace.json`. It wrote that file with `json.dump(..., indent=2)` and no `ensure_ascii=False`, so a single local run escaped every non-ASCII character across the whole catalog — roughly 40 descriptions, every em-dash becoming `—`. Semantically identical, unreadable as a diff, and easy to commit without noticing.
+- Worse, it also overwrote the marketplace description with `plugin.json`'s. That field is a stale one-liner nobody maintains: at version 4.41.0 it still advertised v4.39.0. One local validator run replaced a curated 674-character catalog entry with it. The sync now updates the **version only** — a validator must not silently rewrite hand-written copy in a sibling repo.
+- Both defects were caught by inspecting the sibling repo's working tree before committing the vendor bump, not by any check. Verified by running the old and new sync against the same fixture: old escapes the em-dashes and replaces the description, new changes only the version and leaves every other entry byte-identical.
+- `plugin.json`'s own description updated to describe 4.41.x rather than 4.39.0.
+
 ## [4.41.0] — 2026-08-17 — XOS-259: the pre-compaction handoff reminder now actually reaches the model
 
 - `precompact-handoff.ts` emitted `hookSpecificOutput.additionalContext`. **PreCompact does not support `hookSpecificOutput`** ([hooks reference](https://code.claude.com/docs/en/hooks)) — it takes only universal fields. Claude Code rejected the entire object, taking the valid `systemMessage` down with it, and printed `Hook JSON output validation failed — (root): Invalid input` on every compaction. Layer 1 of the two-layer design had never delivered anything to any session. Layer 2 (the deterministic packet) was unaffected, because the writes happen before stdout.

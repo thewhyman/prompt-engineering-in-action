@@ -6,6 +6,11 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.41.1] - 2026-08-17
+
+- `test-plugin.sh` check 15 corrupted the marketplace catalog it was meant to keep in sync: it wrote `marketplace.json` without `ensure_ascii=False` (escaping every em-dash across ~40 descriptions) and overwrote the curated co-dialectic catalog description with `plugin.json`'s stale one-liner, which still advertised v4.39.0. The sync now updates the version only, and writes UTF-8 as-is.
+- `plugin.json` description refreshed to match the shipped version.
+
 ## [4.41.0] - 2026-08-17
 
 - XOS-259: the pre-compaction handoff reminder now actually reaches the model. `precompact-handoff.ts` emitted `hookSpecificOutput.additionalContext`, but PreCompact supports no `hookSpecificOutput` at all — Claude Code rejected the whole payload, discarding the valid `systemMessage` with it and printing a hook failure on every compaction. Layer 1 of the two-layer design had never delivered anything to any session.
