@@ -6,6 +6,13 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.42.0] - 2026-08-17
+
+- `install.sh` wrote the bare `~/.claude/skills/co-dialectic/` copy by fetching from remote `main` rather than from the plugin it had just installed, so the two could disagree at install time — observed live: bare 4.38.0 against installed plugin 4.41.1. A bare copy SHADOWS the plugin (Claude Code loads it for the unscoped name), while the version banner keeps reporting the plugin it resolved, so the drift was invisible.
+- The copy now comes from the installed plugin, newest version by `sort -V`; remote survives as a fallback only. New `assert_skill_version_matches()` warns loudly on skew without failing the install, and `prune_plugin_skill_shadows()` quarantines pre-existing shadows of other plugin skills on the plugin path. Standalone installs still get every skill bare.
+- `tests/test-install-shadow-source.sh` (20 assertions) wired into CI; seven mutations applied, seven killed.
+
+---
 ## [4.41.1] - 2026-08-17
 
 - `test-plugin.sh` check 15 corrupted the marketplace catalog it was meant to keep in sync: it wrote `marketplace.json` without `ensure_ascii=False` (escaping every em-dash across ~40 descriptions) and overwrote the curated co-dialectic catalog description with `plugin.json`'s stale one-liner, which still advertised v4.39.0. The sync now updates the version only, and writes UTF-8 as-is.
