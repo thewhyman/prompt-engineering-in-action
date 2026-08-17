@@ -295,19 +295,30 @@ print(plugins.get('co-dialectic', {}).get('version', ''))
     elif [ "$MKT_CO_VER" = "$PLG_VER" ]; then
         pass "agent-marketplace co-dialectic version matches ($PLG_VER)"
     else
-        echo "  SYNC: marketplace=$MKT_CO_VER → plugin=$PLG_VER — auto-updating..."
-        PLUGIN_DESC=$(python3 -c "import json; print(json.load(open('plugins/co-dialectic/.claude-plugin/plugin.json'))['description'])" 2>/dev/null || echo "")
-        python3 - "$MKT_FILE" "$PLG_VER" "$PLUGIN_DESC" <<'PYEOF'
+        echo "  SYNC: marketplace=$MKT_CO_VER → plugin=$PLG_VER — auto-updating version..."
+        # Syncs the VERSION ONLY. Two deliberate constraints, both learned the
+        # hard way on 2026-08-17 while shipping XOS-259:
+        #
+        #  1. ensure_ascii=False. The default escapes every non-ASCII character,
+        #     so one local run rewrote ~40 catalog descriptions, turning every
+        #     em-dash into —. Semantically identical, unreadable as a diff,
+        #     and easy to commit without noticing.
+        #
+        #  2. The description is NOT overwritten. It used to be replaced with
+        #     plugin.json's, which is a stale one-liner nobody maintains — that
+        #     same run clobbered the curated 674-character catalog entry with
+        #     text still advertising v4.39.0. The catalog description is
+        #     hand-written and carries version history; a validator must not
+        #     silently rewrite it in a sibling repo.
+        python3 - "$MKT_FILE" "$PLG_VER" <<'PYEOF'
 import json, sys
-path, new_ver, new_desc = sys.argv[1], sys.argv[2], sys.argv[3]
+path, new_ver = sys.argv[1], sys.argv[2]
 data = json.load(open(path))
 for p in data.get('plugins', []):
     if p['name'] == 'co-dialectic':
         p['version'] = new_ver
-        if new_desc:
-            p['description'] = new_desc
 with open(path, 'w') as f:
-    json.dump(data, f, indent=2)
+    json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
 PYEOF
         pass "agent-marketplace updated $MKT_CO_VER → $PLG_VER (commit and push needed)"
