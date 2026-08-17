@@ -1,5 +1,15 @@
 # Changelog — Co-Dialectic
 
+## [4.41.0] — 2026-08-17 — XOS-259: the pre-compaction handoff reminder now actually reaches the model
+
+- `precompact-handoff.ts` emitted `hookSpecificOutput.additionalContext`. **PreCompact does not support `hookSpecificOutput`** ([hooks reference](https://code.claude.com/docs/en/hooks)) — it takes only universal fields. Claude Code rejected the entire object, taking the valid `systemMessage` down with it, and printed `Hook JSON output validation failed — (root): Invalid input` on every compaction. Layer 1 of the two-layer design had never delivered anything to any session. Layer 2 (the deterministic packet) was unaffected, because the writes happen before stdout.
+- The deeper defect: even had the field been accepted, context injected at PreCompact lands in the conversation that is about to be summarized away. The reminder was aimed at the wrong moment in the lifecycle.
+- The reminder now fires from a new `SessionStart` hook with `matcher: "compact"` — the documented channel where *"Claude Code adds plain-text stdout as context that Claude can see and act on"* — so it arrives after the summary exists, when the model can still act. It is rendered at consumption time, and the marker is flipped to `handoff_pending: false` so it delivers exactly once. Markers older than 6h, and pre-4.41.0 markers with no `handoff_pending` field, are ignored rather than replayed.
+- New `hooks/handoff-paths.ts` is the single path resolver imported by both the writer and the reader. When each computed the marker path privately, a divergence would have been silent — the write succeeds, the read finds nothing, no error anywhere. Same failure class XOS-213 removed from the liveness predicate, same structural remedy.
+- `hooks/xos-259-hook-output-schema.test.ts` (23 tests) guards the **class**, not the instance: it sweeps every hook in the plugin and fails if any emits `hookSpecificOutput` for an event that does not support it. Both guards are checked against known-bad input as well as known-good, so neither can pass vacuously.
+- Mutation-proved: restoring the old payload shape, dropping the `source !== "compact"` check, skipping marker consumption, emitting JSON instead of plain text, and desynchronising the writer's marker filename from the reader's were each applied and each turned the suite red (4, 2, 1, 1 and 4 failures respectively).
+- `main()` in both hooks is now behind `import.meta.main`, so importing them from a test cannot fire the hook body — an unguarded `process.exit()` at module scope aborts the whole `bun test` runner and silently takes every other suite with it.
+
 ## [4.40.0] — 2026-08-16 — XOS-213: one liveness rule, mechanically enforced across every implementation
 
 - Liveness was decided in three places that disagreed on the same input. `statusline.sh` carried the comment *"Keep this predicate in sync with hooks/liveness.ts"* — a hand-maintained contract, which is the drift hazard itself.

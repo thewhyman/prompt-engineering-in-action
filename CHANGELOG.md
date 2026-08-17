@@ -6,6 +6,12 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.41.0] - 2026-08-17
+
+- XOS-259: the pre-compaction handoff reminder now actually reaches the model. `precompact-handoff.ts` emitted `hookSpecificOutput.additionalContext`, but PreCompact supports no `hookSpecificOutput` at all — Claude Code rejected the whole payload, discarding the valid `systemMessage` with it and printing a hook failure on every compaction. Layer 1 of the two-layer design had never delivered anything to any session.
+- Even had the field been accepted, context injected at PreCompact lands in the conversation being summarized away. The reminder now fires from a new `SessionStart` hook with `matcher: "compact"` — the documented channel where plain stdout is added to the model's context — and is consumed once so a resume cannot replay it.
+- New `hooks/handoff-paths.ts` is the single path resolver imported by both the writer and the reader, so a divergence cannot fail silently. `hooks/xos-259-hook-output-schema.test.ts` (23 tests) guards the class rather than the instance: it sweeps every hook and fails if any emits `hookSpecificOutput` for an unsupported event. Five mutations applied, five killed.
+
 ## [4.40.0] - 2026-08-16
 
 - XOS-213: one liveness rule, mechanically enforced. `statusline.sh` no longer reimplements the freshness predicate by hand; a shared fixture table (`hooks/liveness-fixtures.ts`) drives the canonical evaluator, the `user-prompt-submit` path and `statusline.sh` itself, and the suite fails if any two disagree. Fixed two real divergences on the `active` field, unifying on the tolerant `boolean-or-string` reading so a legacy string cannot manufacture a false DEGRADED.

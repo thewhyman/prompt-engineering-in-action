@@ -1,77 +1,58 @@
 #!/usr/bin/env bun
 /**
- * precompact-handoff.ts — Co-Dialectic v4.21.1 auto-handoff-before-compaction.
+ * precompact-handoff.ts — capture pre-compaction state (Co-Dialectic).
  *
- * Belt-and-suspenders: emits Claude reminder AND captures structured packet.
- *
- * Fires on PreCompact event (Claude Code's signal that the context window is
- * about to be compacted into a summary). At this moment, the session has its
- * FULL conversation context intact for the last time. If we don't capture
- * structured handoff NOW, the post-compaction summary will lose:
+ * Fires on PreCompact (Claude Code's signal that the context window is about to
+ * be summarized). At this moment the session still has its FULL conversation
+ * context. Once compaction completes, the summary will have dropped:
  *   - the actual unfinished tasks the user just discussed
  *   - the decisions made in the current arc
  *   - the lessons that should be codified
  *   - the open follow-ups and their crisp triggers
  *
- * Two-layer capture (v4.21.1):
- *   1. RECOMMEND layer — emit hookSpecificOutput.additionalContext with
- *      strong system-reminder telling Claude to invoke the codi-handoff skill
- *      IMMEDIATELY. This is the rich path: the skill has Protocol 9 logic,
- *      structured packet schema, workspace-substrate dispatch.
- *   2. CAPTURE layer (belt-and-suspenders) — write a structured JSON packet
- *      to <workspace>/brain/sessions/<session_id>/ containing what
- *      we CAN deterministically capture from the hook context: timestamp,
- *      trigger, cwd, git state (branch, uncommitted files, recent commits),
- *      transcript_path. Even if Claude ignores the reminder, this packet
- *      survives — the next session's waky-waky can find + read it.
+ * ── What this hook does (XOS-259 rewrite) ────────────────────────────────────
+ * It CAPTURES: a structured packet plus a latest-only marker under
+ * <workspace>/brain/sessions/<session_id>/, holding what can be known
+ * deterministically from the OS — timestamp, trigger, cwd, git state, and the
+ * transcript path.
  *
- * Why both layers:
- *   - Layer 1 alone fails when Claude is mid-tool-use and can't act before
- *     compaction completes, OR when Claude (me) pattern-matches incorrectly
- *     and writes the handoff manually instead of invoking the skill.
- *   - Layer 2 alone is structurally limited — only knows what's in the OS,
- *     not what's in the conversation. Misses the "unfinished work" semantic.
- *   - Together: deterministic floor + conversational ceiling.
+ * It does NOT try to talk to the model. Two reasons, and the second is the one
+ * that matters:
  *
- * Fail-safe: ALWAYS exit 0. Never blocks compaction. If either layer fails,
- * log to stderr and proceed — compaction must not be blocked by hook errors.
+ *   1. It can't. PreCompact does not support `hookSpecificOutput` — only the
+ *      universal fields (`continue`, `systemMessage`, `terminalSequence`, …).
+ *      The previous version emitted `hookSpecificOutput.additionalContext`, so
+ *      the whole payload failed schema validation and was discarded, taking the
+ *      valid `systemMessage` down with it. Every compaction printed a hook
+ *      failure and injected nothing.
+ *      → https://code.claude.com/docs/en/hooks
+ *
+ *   2. It shouldn't. Context injected at PreCompact lands in the conversation
+ *      that is about to be summarized away. Even had the field been accepted,
+ *      the reminder was aimed at the wrong moment in the lifecycle.
+ *
+ * The reminder now fires from postcompact-handoff-reminder.ts on
+ * SessionStart(compact) — after the summary exists, where plain stdout IS added
+ * to the model's context and the model can still act. This hook's job is to
+ * leave that hook something true to say: `handoff_pending: true` in the marker.
+ *
+ * Fail-safe: ALWAYS exit 0. Never blocks compaction. If a write fails, log to
+ * stderr and proceed — compaction must not be blocked by hook errors.
  */
 
 import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
 import { spawnSync } from "child_process";
-import { safeSessionId } from "./session-state.ts";
+import {
+  artifactDirFor,
+  markerPathFor,
+  packetPathFor,
+  type HandoffPathInput,
+} from "./handoff-paths.ts";
 
-interface PreCompactInput {
+interface PreCompactInput extends HandoffPathInput {
   hook_event_name?: string;
   transcript_path?: string;
   trigger?: "manual" | "auto" | string;
-  cwd?: string;
-  session_id?: string;
-  workspace?: string | {
-    current_dir?: string;
-    project_dir?: string;
-  };
-}
-
-function workspaceRoot(input: PreCompactInput, cwd: string): string {
-  if (typeof input.workspace === "string" && input.workspace.trim()) {
-    return input.workspace.trim();
-  }
-  if (input.workspace && typeof input.workspace === "object") {
-    const projectDir = input.workspace.project_dir?.trim();
-    if (projectDir) return projectDir;
-    const currentDir = input.workspace.current_dir?.trim();
-    if (currentDir) return currentDir;
-  }
-
-  const repoRoot = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-  });
-  if ((repoRoot.status ?? 1) === 0 && repoRoot.stdout?.trim()) {
-    return repoRoot.stdout.trim();
-  }
-  return cwd;
 }
 
 interface GitState {
@@ -149,14 +130,12 @@ async function main(): Promise<void> {
   }
 
   const now = new Date().toISOString();
-  const tsCompact = now.replace(/[:.]/g, "-");
   const trigger = input.trigger ?? "unknown";
   const transcript = input.transcript_path ?? null;
   const cwd = input.cwd ?? process.cwd();
   const sessionId = input.session_id ?? null;
-  const sessionKey = safeSessionId(sessionId) ?? "unknown-session";
-  const artifactDir = join(workspaceRoot(input, cwd), "brain", "sessions", sessionKey);
-  const markerFile = join(artifactDir, "last-precompact.json");
+  const artifactDir = artifactDirFor(input);
+  const markerFile = markerPathFor(input);
 
   // ── Layer 2: CAPTURE — structured packet to disk ──────────────────────────
   const gitState = captureGitState(cwd);
@@ -188,7 +167,7 @@ async function main(): Promise<void> {
   let packetFile: string | null = null;
   try {
     if (!existsSync(artifactDir)) mkdirSync(artifactDir, { recursive: true });
-    packetFile = join(artifactDir, `precompact-packet-${sessionKey}-${tsCompact}.json`);
+    packetFile = packetPathFor(input, now);
     writeFileSync(packetFile, JSON.stringify(packet, null, 2));
   } catch (e) {
     process.stderr.write(`precompact-handoff: packet write failed: ${e}\n`);
@@ -209,7 +188,15 @@ async function main(): Promise<void> {
           packet_file: packetFile,
           git_uncommitted_count: gitState.uncommitted_files_count ?? 0,
           git_branch: gitState.branch ?? null,
-          schema_version: "1.1.0",
+          git_head_sha: gitState.head_sha ?? null,
+          has_uncommitted_handoff_doc: gitState.has_uncommitted_handoff_doc ?? false,
+          // XOS-259: the post-compact hook reads this. `true` means "a handoff
+          // reminder is owed to the model and has not been delivered yet".
+          // postcompact-handoff-reminder.ts flips it to false once it prints,
+          // so a resume or a second compaction does not re-nag.
+          handoff_pending: true,
+          consumed_at: null,
+          schema_version: "1.2.0",
         },
         null,
         2
@@ -219,61 +206,48 @@ async function main(): Promise<void> {
     process.stderr.write(`precompact-handoff: marker write failed: ${e}\n`);
   }
 
-  // ── Layer 1: RECOMMEND — system-reminder to invoke skill ─────────────────
-  const reminder = [
-    "━━━ PRE-COMPACT HANDOFF TRIGGER (v4.21.1) ━━━",
-    `Compaction is firing (trigger=${trigger}, at=${now}). The full conversation`,
-    "context is intact for the LAST TIME before summarization. Capture handoff NOW.",
-    "",
-    "REQUIRED ACTION before the next user turn:",
-    "  1. Invoke the codi-handoff skill (Protocol 9 — auto closure detection).",
-    "  2. Let it run its phases: scan unfinished items, decisions, lessons,",
-    "     codify open follow-ups with crisp triggers, emit structured packet.",
-    "  3. The workspace adapter persists to NEXT_SESSION_HANDOFF.md or the",
-    "     configured substrate (GitHub Issues, etc.). Codi knows nothing about",
-    "     the substrate — it captures + emits.",
-    "",
-    "DO NOT skip this. DO NOT write the handoff manually via Edit/Write — the",
-    "skill has the structured-packet schema + workspace dispatch. Manual writes",
-    "lose the structure and diverge from the canonical Protocol 9 spec.",
-    "",
-    "BELT-AND-SUSPENDERS (v4.21.1): a minimal deterministic packet was already",
-    `written to ${packetFile ?? "(packet write failed — check stderr)"}`,
-    "containing timestamp, trigger, cwd, git state (branch, uncommitted files,",
-    "recent commits), and transcript_path. This is the structural floor. The",
-    "codi-handoff skill provides the semantic ceiling. Both matter.",
-    "",
-    `Git state at capture: branch=${gitState.branch ?? "n/a"}, ` +
-      `uncommitted=${gitState.uncommitted_files_count ?? 0}, ` +
-      `HEAD=${gitState.head_sha ?? "n/a"}.`,
-    gitState.has_uncommitted_handoff_doc
-      ? "⚠ NEXT_SESSION_HANDOFF.md is uncommitted — may indicate in-flight handoff work."
-      : "",
-    "",
-    `Marker: ${markerFile} (post-compact Claude can read this to verify).`,
-    "Reference: codi-handoff skill at ~/.claude/skills/handoff/SKILL.md.",
-    "━━━ END PRE-COMPACT TRIGGER ━━━",
-  ]
-    .filter((l) => l !== "")
-    .join("\n");
-
-  const output = {
-    hookSpecificOutput: {
-      hookEventName: "PreCompact",
-      additionalContext: reminder,
-    },
-    systemMessage:
-      `Co-Dialectic v4.21.1: PreCompact firing — auto-handoff captured ` +
-      `(trigger=${trigger}, packet=${packetFile ? "✓" : "✗"}, ` +
-      `git_uncommitted=${gitState.uncommitted_files_count ?? "n/a"}).`,
-  };
+  // ── Report ────────────────────────────────────────────────────────────────
+  // `systemMessage` is the ONLY channel PreCompact has, and it goes to the user,
+  // not the model. Adding `hookSpecificOutput` here is what broke this hook: the
+  // schema rejects it for this event and discards the entire object, so the
+  // failure is total rather than partial. Keep this payload to universal fields.
+  const output = buildPreCompactOutput({
+    trigger,
+    packetWritten: packetFile !== null,
+    uncommitted: gitState.uncommitted_files_count ?? null,
+  });
 
   process.stdout.write(JSON.stringify(output));
   process.exit(0);
 }
 
-main().catch((err) => {
-  // Fail-safe: never block compaction on error
-  process.stderr.write(`precompact-handoff error: ${err}\n`);
-  process.exit(0);
-});
+/**
+ * Exported so the schema test can assert the shape without spawning a process,
+ * and — more importantly — so the assertion is against the same object the hook
+ * actually prints, not a copy of it.
+ */
+export function buildPreCompactOutput(facts: {
+  trigger: string;
+  packetWritten: boolean;
+  uncommitted: number | null;
+}): { systemMessage: string } {
+  return {
+    systemMessage:
+      `Co-Dialectic: pre-compaction state captured (trigger=${facts.trigger}, ` +
+      `packet=${facts.packetWritten ? "✓" : "✗"}, ` +
+      `uncommitted=${facts.uncommitted ?? "n/a"}). ` +
+      `Handoff reminder will fire after compaction completes.`,
+  };
+}
+
+// Only run when executed as a hook. Without this guard, importing anything from
+// this module (the schema test does) would run main(), read stdin, write files
+// and call process.exit(0) — which aborts the whole `bun test` runner and takes
+// every other suite down with it, silently.
+if (import.meta.main) {
+  main().catch((err) => {
+    // Fail-safe: never block compaction on error
+    process.stderr.write(`precompact-handoff error: ${err}\n`);
+    process.exit(0);
+  });
+}
