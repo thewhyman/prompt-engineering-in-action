@@ -1,5 +1,17 @@
 # Changelog — Co-Dialectic
 
+## [4.43.0] — 2026-08-17 — co-dialectic installs from its own open-source marketplace
+
+Co-Dialectic is AGPL and independent. Its canonical install is this repository's marketplace (`Exponential-OS/prompt-engineering-in-action`, declared `"name": "thewhyman"`). Every xOS product installs from `Exponential-OS/agent-marketplace` (`"name": "xos"`) instead. The installer no longer reaches into the xOS marketplace at all.
+
+- **The dead fallback.** `install.sh` added agent-marketplace with a fallback to this repo, then unconditionally installed `co-dialectic@xos`. A plugin is addressed `<plugin>@<marketplace-name>`, and that name comes from the marketplace's own manifest — not the repo slug. So if the *fallback* was the add that succeeded, the marketplace registered as `thewhyman` while the next line still asked for `@xos`, which can never resolve. The install then failed into `download_skills_direct`, which writes a bare copy of every skill into `~/.claude/skills/` — and bare copies shadow the plugin. **The dead fallback was a shadow generator.**
+- The address is now derived from the marketplace manifest at install time rather than hardcoded, so a future marketplace rename cannot silently stop matching. The resolved name flows into the install target *and* into `plugin_skill_source` / `prune_plugin_skill_shadows`, which previously hardcoded `xos` and would otherwise look up the plugin cache under the wrong directory.
+- Resolution is an exact `python3` JSON parse (already an unguarded dependency on this path — it wires the fish-gate hook), falling back to an awk heuristic, then to a loud literal. The awk tier cannot read a manifest that puts `"plugins"` before `"name"`; that limitation is documented at the call site and covered by the fallback chain.
+- **This marketplace now ships co-dialectic only.** `career-os` was removed: it was renamed `career-intelligence` and lives in agent-marketplace at v1.0.0, while this catalog still advertised v0.27.0 pinned to a dead repo URL. `jury` was removed as an xOS product (agent-marketplace carries a newer v0.2.0).
+- Non-Claude routes — Cursor, Antigravity, Windsurf, direct download — are untouched. Those users may not run a Claude LLM at all and genuinely need every skill installed bare.
+- Suite grew to **27 assertions**; five mutations applied, five killed (reverting to `@xos`, re-adding agent-marketplace, hardcoding `xos` in either helper, and restoring `career-os` to the catalog).
+- Also fixed a test-maintenance trap: three older assertions anchored their block scan on the literal string `plugin install co-dialectic@xos`. Removing that string made them scan an **empty** block and fail — an anchor that silently evaporates when the thing it names changes. They now anchor on the marketplace add.
+
 ## [4.42.0] — 2026-08-17 — the bare skill copy can no longer diverge from the plugin it shadows
 
 - `install.sh` wrote the one bare copy at `~/.claude/skills/co-dialectic/` by fetching from **remote `main`**, not from the plugin it had just installed. Remote main and the marketplace-vendored version are two different artifacts, so they can disagree at install time. Found on a live machine today: bare copy **4.38.0**, installed plugin **4.41.1**.
