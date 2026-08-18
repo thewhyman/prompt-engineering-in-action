@@ -174,7 +174,10 @@ else
 fi
 
 # ── 8. the plugin-success path must source from the plugin, not remote ──────
-BLOCK="$(sed -n '/plugin install co-dialectic@xos/,/_use_direct=false/p' "$INSTALL_SH")"
+# Anchor on the marketplace add, not on a literal install address — the address
+# is now derived at runtime, and anchoring on it made these assertions silently
+# scan an EMPTY block the moment the address changed.
+BLOCK="$(sed -n '/marketplace add "\$MARKETPLACE_REPO"/,/_use_direct=false/p' "$INSTALL_SH")"
 
 # Grep for the CALL, not the name. A mutation that replaced the call with
 # `if false; then` left the variable `_plugin_skill_source` in place, so an
@@ -194,6 +197,66 @@ case "$BLOCK" in
   *prune_plugin_skill_shadows*) ok "plugin-success path prunes pre-existing shadows" ;;
   *)                            bad "plugin-success path prunes shadows" "not called" ;;
 esac
+
+# ── 9. co-dialectic installs from its OWN open-source marketplace ───────────
+# Product rule: co-dialectic is AGPL and independent, so its canonical install is
+# this repo's marketplace (prompt-engineering-in-action, which declares
+# "name": "thewhyman"). All xOS products install from agent-marketplace ("xos").
+#
+# The bug: install.sh added agent-marketplace with a fallback to THIS repo, then
+# unconditionally installed `co-dialectic@xos`. A plugin is addressed
+# <plugin>@<marketplace-NAME>, and the name comes from the manifest, not the repo
+# slug — so if the fallback was the add that succeeded, the marketplace registered
+# as `thewhyman` and `@xos` could never resolve. The install then fell through to
+# download_skills_direct, which writes a bare copy of every skill: the dead
+# fallback was a shadow generator.
+case "$(grep -c 'co-dialectic@xos' "$INSTALL_SH")" in
+  0) ok "no hardcoded co-dialectic@xos address remains" ;;
+  *) bad "no hardcoded co-dialectic@xos" "$(grep -n 'co-dialectic@xos' "$INSTALL_SH" | head -1)" ;;
+esac
+
+if grep -q 'marketplace add "\$MARKETPLACE_REPO"' "$INSTALL_SH"; then
+  ok "adds exactly one marketplace, from a named constant"
+else
+  bad "adds one marketplace from a constant" "still a multi-add fallback chain?"
+fi
+
+case "$(grep -c 'agent-marketplace' "$INSTALL_SH")" in
+  0) ok "installer no longer reaches into the xOS marketplace" ;;
+  *) bad "no agent-marketplace reference" "$(grep -n 'agent-marketplace' "$INSTALL_SH" | head -1)" ;;
+esac
+
+# The resolved name must flow into BOTH the install target and the shadow helpers,
+# or the plugin cache path is looked up under the wrong marketplace directory.
+BLOCK2="$(sed -n '/marketplace add "\$MARKETPLACE_REPO"/,/_use_direct=false/p' "$INSTALL_SH")"
+case "$BLOCK2" in
+  *'plugin_skill_source "$_marketplace_name"'*) ok "resolved name flows into plugin_skill_source" ;;
+  *) bad "resolved name flows into plugin_skill_source" "still hardcoded" ;;
+esac
+case "$BLOCK2" in
+  *'prune_plugin_skill_shadows "$_marketplace_name"'*) ok "resolved name flows into prune_plugin_skill_shadows" ;;
+  *) bad "resolved name flows into prune" "still hardcoded" ;;
+esac
+
+# ── 10. this marketplace ships co-dialectic ONLY ────────────────────────────
+# career-os was renamed career-intelligence (now v1.0.0 in agent-marketplace);
+# this catalog listed v0.27.0 pinned to a dead repo URL. jury is an xOS product.
+# Neither belongs in the open-source marketplace.
+MKT="$ROOT/.claude-plugin/marketplace.json"
+NAMES="$(python3 -c "
+import json;print(' '.join(p['name'] for p in json.load(open('$MKT'))['plugins']))" 2>/dev/null)"
+if [ "$NAMES" = "co-dialectic" ]; then
+  ok "OSS marketplace ships co-dialectic only (got: $NAMES)"
+else
+  bad "OSS marketplace ships co-dialectic only" "got: $NAMES"
+fi
+
+# The catalog must not have been mangled by a JSON round-trip.
+if grep -q 'u2014' "$MKT" 2>/dev/null; then
+  bad "no escaped em-dashes in the catalog" "json.dump without ensure_ascii=False"
+else
+  ok "no escaped em-dashes in the catalog"
+fi
 
 rm -rf "${FAKE:-/nonexistent}"
 echo ""

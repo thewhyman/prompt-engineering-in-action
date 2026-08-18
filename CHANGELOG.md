@@ -6,6 +6,13 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.43.0] - 2026-08-17
+
+- co-dialectic now installs from its own open-source marketplace (`prompt-engineering-in-action`, name `thewhyman`); all xOS products come from `agent-marketplace` (name `xos`). The installer previously added agent-marketplace with a fallback to this repo but then unconditionally installed `co-dialectic@xos` — a plugin is addressed by MARKETPLACE NAME, not repo slug, so if the fallback won, `@xos` could never resolve and the install fell through to the direct-download path that writes shadow copies of every skill.
+- The address is derived from the marketplace manifest at install time and flows into the shadow helpers, which previously hardcoded `xos`. This marketplace now ships co-dialectic only; `career-os` (renamed, stale, dead URL) and `jury` (xOS) were removed.
+- 27 assertions in CI; five mutations applied, five killed.
+
+---
 ## [4.42.0] - 2026-08-17
 
 - `install.sh` wrote the bare `~/.claude/skills/co-dialectic/` copy by fetching from remote `main` rather than from the plugin it had just installed, so the two could disagree at install time — observed live: bare 4.38.0 against installed plugin 4.41.1. A bare copy SHADOWS the plugin (Claude Code loads it for the unscoped name), while the version banner keeps reporting the plugin it resolved, so the drift was invisible.
