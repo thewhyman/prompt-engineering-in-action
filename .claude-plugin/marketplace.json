@@ -5,15 +5,17 @@
     "email": "thewhyman@users.noreply.github.com"
   },
   "metadata": {
-    "description": "Canonical open-source marketplace for Co-Dialectic."
+    "description": "Canonical open-source marketplace for Co-Dialectic.",
+    "distribution_note": "NOT the distribution channel. This manifest exists so the plugin can be registered and install-tested locally (test-plugin.sh --smoke-install). Users install co-dialectic from Exponential-OS/agent-marketplace (marketplace name 'xos'), which is the gateway to the other engines — see install.sh MARKETPLACE_REPO. Do not advertise this manifest as an install address: shipping from two marketplaces produced a 4.43.0/4.41.1 split on one machine within an hour."
   },
   "plugins": [
     {
       "name": "co-dialectic",
       "source": "./plugins/co-dialectic",
       "description": "Co-Dialectic v4.38.0 - Single-key sharpen select (I/S/D) + canonical codi command prefix; deterministic Protocol-1 heartbeat.",
-      "version": "4.43.0",
-      "category": "productivity"
+      "version": "4.44.0",
+      "category": "productivity",
+      "license": "AGPL-3.0"
     }
   ],
   "_product_vs_solution_marker": "product-vs-solution: example - marketplace owner/author attribution is legitimate"

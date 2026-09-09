@@ -6,6 +6,12 @@
 All notable changes to this repository are tracked here. This project follows [Semantic Versioning](https://semver.org/).
 
 ---
+## [4.44.0] - 2026-09-08
+
+- Distribution moves to `Exponential-OS/agent-marketplace` (name `xos`); the source stays here. This repo's own `marketplace.json` is removed so there is exactly one install address — shipping from both produced a 4.43.0/4.41.1 split on one machine within the hour.
+- `plugin.json` and `package.json` now declare `AGPL-3.0`, matching `LICENSE`; the public catalog had listed the plugin as `Proprietary`.
+
+---
 ## [4.43.0] - 2026-08-17
 
 - co-dialectic now installs from its own open-source marketplace (`prompt-engineering-in-action`, name `thewhyman`); all xOS products come from `agent-marketplace` (name `xos`). The installer previously added agent-marketplace with a fallback to this repo but then unconditionally installed `co-dialectic@xos` — a plugin is addressed by MARKETPLACE NAME, not repo slug, so if the fallback won, `@xos` could never resolve and the install fell through to the direct-download path that writes shadow copies of every skill.
