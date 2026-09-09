@@ -1,5 +1,14 @@
 # Changelog — Co-Dialectic
 
+## [4.44.0] — 2026-09-08 — distribution moves to the xOS gateway; the AGPL license is stated where it is read
+
+- **Distribution ≠ source.** Co-Dialectic's source stays here — AGPL, public, forkable. Its *distribution* moves to `Exponential-OS/agent-marketplace` (`"name": "xos"`), so every install is a doorway to the other engines rather than a dead end. 4.43.0 had routed installs at this repo's own marketplace in the name of independence, which the code being public already guaranteed; what it actually bought was a second distribution channel.
+- **One plugin, one install address.** `install.sh` is now the single thing that names the distribution channel. This repo's `.claude-plugin/marketplace.json` is *retained* — `test-plugin.sh --smoke-install` registers this repo as a local marketplace to prove the plugin actually installs, and losing that check risks shipping a plugin nobody can install. It now carries a `distribution_note` saying out loud that it is not the install address. Shipping from both marketplaces produced `co-dialectic@thewhyman 4.43.0` beside `co-dialectic@xos 4.41.1` on a single machine within the hour — the drift the signal-pollution invariant exists to prevent, reintroduced by the very change meant to tidy distribution up.
+- The install address is still **derived from the gateway's manifest** at install time rather than hardcoded, and the resolved name still flows into `plugin_skill_source` and `prune_plugin_skill_shadows`. A literal suffix is exactly what stops matching silently after a rename.
+- **License stated where it is read.** `LICENSE` grants AGPL-3.0 and `SKILL.md` says so, but `plugin.json` and `package.json` declared nothing, and the public catalog listed the plugin as `Proprietary`. A public catalog mislabelling an AGPL project is a trust problem, and it undercuts the open-source positioning that makes this the top of the funnel. Both manifests now declare `AGPL-3.0`; the catalog is corrected in the marketplace repo.
+- Non-Claude routes — Cursor, Antigravity, Windsurf, direct download — remain untouched. Those users may not run a Claude LLM at all.
+- Suite at 28 assertions; four mutations applied, four killed (reverting the gateway, resolving the name from this repo again, restoring a competing manifest, dropping the license declaration).
+
 ## [4.43.0] — 2026-08-17 — co-dialectic installs from its own open-source marketplace
 
 Co-Dialectic is AGPL and independent. Its canonical install is this repository's marketplace (`Exponential-OS/prompt-engineering-in-action`, declared `"name": "thewhyman"`). Every xOS product installs from `Exponential-OS/agent-marketplace` (`"name": "xos"`) instead. The installer no longer reaches into the xOS marketplace at all.

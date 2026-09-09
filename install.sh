@@ -6,8 +6,13 @@
 set -e
 
 REPO="https://raw.githubusercontent.com/Exponential-OS/prompt-engineering-in-action/main"
-MARKETPLACE_REPO="Exponential-OS/prompt-engineering-in-action"
-VERSION="4.43.0"
+# Distribution goes through the xOS gateway, not this repo. The SOURCE lives here
+# (AGPL, public, forkable); the marketplace is the distribution channel, and routing
+# every co-dialectic install through the gateway is what makes it a doorway to the
+# other engines. Source != distribution.
+MARKETPLACE_REPO="Exponential-OS/agent-marketplace"
+MARKETPLACE_RAW="https://raw.githubusercontent.com/Exponential-OS/agent-marketplace/main"
+VERSION="4.44.0"
 CONFIG_DIR="$HOME/.co-dialectic"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 TARGET_ARG="auto"
@@ -62,7 +67,7 @@ marketplace_name_from_repo() {
     local marketplace_file marketplace_name
     marketplace_file=$(mktemp) || return 1
 
-    if ! fetch_repo_file "$REPO/.claude-plugin/marketplace.json" "$marketplace_file"; then
+    if ! fetch_repo_file "$MARKETPLACE_RAW/.claude-plugin/marketplace.json" "$marketplace_file"; then
         rm -f "$marketplace_file"
         return 1
     fi
@@ -899,7 +904,7 @@ if [ -d "$HOME/.claude" ] || command -v claude > /dev/null 2>&1; then
         # Claude CLI present — prefer repo-native plugin install; fall back to direct download
         _use_direct=true
         if ! _marketplace_name=$(marketplace_name_from_repo); then
-            _marketplace_name="thewhyman"
+            _marketplace_name="xos"
             echo "   ⚠️  Could not resolve the marketplace name; using fallback '$_marketplace_name'."
         fi
         if ask_user "✅ Detected Claude Code. Install via 'claude plugin install co-dialectic@$_marketplace_name' (recommended)? [Y/n]" "y"; then
@@ -1075,7 +1080,7 @@ else
     echo ""
     if [ -z "${_marketplace_name:-}" ]; then
         if ! _marketplace_name=$(marketplace_name_from_repo); then
-            _marketplace_name="thewhyman"
+            _marketplace_name="xos"
             echo "   ⚠️  Could not resolve the marketplace name; using fallback '$_marketplace_name'."
         fi
     fi

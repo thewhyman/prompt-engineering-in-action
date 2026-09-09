@@ -198,65 +198,72 @@ case "$BLOCK" in
   *)                            bad "plugin-success path prunes shadows" "not called" ;;
 esac
 
-# ── 9. co-dialectic installs from its OWN open-source marketplace ───────────
-# Product rule: co-dialectic is AGPL and independent, so its canonical install is
-# this repo's marketplace (prompt-engineering-in-action, which declares
-# "name": "thewhyman"). All xOS products install from agent-marketplace ("xos").
+# ── 9. distribution goes through the xOS gateway ────────────────────────────
+# Co-Dialectic's SOURCE lives in this repo (AGPL, public, forkable). Its
+# DISTRIBUTION goes through Exponential-OS/agent-marketplace, so every install is a
+# doorway to the other engines. Source != distribution.
 #
-# The bug: install.sh added agent-marketplace with a fallback to THIS repo, then
-# unconditionally installed `co-dialectic@xos`. A plugin is addressed
-# <plugin>@<marketplace-NAME>, and the name comes from the manifest, not the repo
-# slug — so if the fallback was the add that succeeded, the marketplace registered
-# as `thewhyman` and `@xos` could never resolve. The install then fell through to
-# download_skills_direct, which writes a bare copy of every skill: the dead
-# fallback was a shadow generator.
-case "$(grep -c 'co-dialectic@xos' "$INSTALL_SH")" in
-  0) ok "no hardcoded co-dialectic@xos address remains" ;;
-  *) bad "no hardcoded co-dialectic@xos" "$(grep -n 'co-dialectic@xos' "$INSTALL_SH" | head -1)" ;;
+# The earlier arrangement shipped it from BOTH marketplaces at once, which produced
+# co-dialectic@thewhyman 4.43.0 beside co-dialectic@xos 4.41.1 on one machine within
+# the hour. One plugin, one distribution address.
+case "$(grep -c 'MARKETPLACE_REPO="Exponential-OS/agent-marketplace"' "$INSTALL_SH")" in
+  0) bad "installer points at the xOS gateway" "MARKETPLACE_REPO is not agent-marketplace" ;;
+  *) ok "installer points at the xOS gateway" ;;
 esac
 
-if grep -q 'marketplace add "\$MARKETPLACE_REPO"' "$INSTALL_SH"; then
-  ok "adds exactly one marketplace, from a named constant"
-else
-  bad "adds one marketplace from a constant" "still a multi-add fallback chain?"
-fi
-
-case "$(grep -c 'agent-marketplace' "$INSTALL_SH")" in
-  0) ok "installer no longer reaches into the xOS marketplace" ;;
-  *) bad "no agent-marketplace reference" "$(grep -n 'agent-marketplace' "$INSTALL_SH" | head -1)" ;;
-esac
-
-# The resolved name must flow into BOTH the install target and the shadow helpers,
-# or the plugin cache path is looked up under the wrong marketplace directory.
+# The address is still DERIVED from the gateway's own manifest, never hardcoded — a
+# literal suffix is what silently stops matching after a marketplace rename.
 BLOCK2="$(sed -n '/marketplace add "\$MARKETPLACE_REPO"/,/_use_direct=false/p' "$INSTALL_SH")"
 case "$BLOCK2" in
   *'plugin_skill_source "$_marketplace_name"'*) ok "resolved name flows into plugin_skill_source" ;;
-  *) bad "resolved name flows into plugin_skill_source" "still hardcoded" ;;
+  *) bad "resolved name flows into plugin_skill_source" "hardcoded again" ;;
 esac
 case "$BLOCK2" in
   *'prune_plugin_skill_shadows "$_marketplace_name"'*) ok "resolved name flows into prune_plugin_skill_shadows" ;;
-  *) bad "resolved name flows into prune" "still hardcoded" ;;
+  *) bad "resolved name flows into prune" "hardcoded again" ;;
 esac
 
-# ── 10. this marketplace ships co-dialectic ONLY ────────────────────────────
-# career-os was renamed career-intelligence (now v1.0.0 in agent-marketplace);
-# this catalog listed v0.27.0 pinned to a dead repo URL. jury is an xOS product.
-# Neither belongs in the open-source marketplace.
-MKT="$ROOT/.claude-plugin/marketplace.json"
-NAMES="$(python3 -c "
-import json;print(' '.join(p['name'] for p in json.load(open('$MKT'))['plugins']))" 2>/dev/null)"
-if [ "$NAMES" = "co-dialectic" ]; then
-  ok "OSS marketplace ships co-dialectic only (got: $NAMES)"
+if grep -q 'MARKETPLACE_RAW/.claude-plugin/marketplace.json' "$INSTALL_SH"; then
+  ok "name resolved from the GATEWAY manifest, not this repo's"
 else
-  bad "OSS marketplace ships co-dialectic only" "got: $NAMES"
+  bad "name resolved from the gateway manifest" "still fetching this repo's manifest"
 fi
 
-# The catalog must not have been mangled by a JSON round-trip.
-if grep -q 'u2014' "$MKT" 2>/dev/null; then
-  bad "no escaped em-dashes in the catalog" "json.dump without ensure_ascii=False"
+# ── 10. this repo's manifest is for TESTING, not distribution ────────────────
+# Deleting it entirely was the first instinct, but test-plugin.sh --smoke-install
+# registers this repo as a local marketplace to prove the plugin actually installs.
+# Losing that check risks shipping a plugin that cannot be installed — worse than the
+# dual-add it was meant to prevent. So the manifest stays, install.sh is the single
+# thing that names the distribution channel, and the manifest says so out loud.
+if [ -f "$ROOT/.claude-plugin/marketplace.json" ]; then
+  ok "local manifest retained (install smoke test depends on it)"
+  NOTE=$(python3 -c "import json;print(json.load(open('$ROOT/.claude-plugin/marketplace.json')).get('metadata',{}).get('distribution_note',''))" 2>/dev/null)
+  case "$NOTE" in
+    *"NOT the distribution channel"*) ok "manifest declares it is not the install address" ;;
+    *) bad "manifest declares it is not the install address" "distribution_note missing" ;;
+  esac
+  LIC=$(python3 -c "import json;print([p.get('license') for p in json.load(open('$ROOT/.claude-plugin/marketplace.json'))['plugins'] if p['name']=='co-dialectic'][0])" 2>/dev/null)
+  if [ "$LIC" = "AGPL-3.0" ]; then ok "local manifest declares AGPL-3.0"
+  else bad "local manifest declares AGPL-3.0" "got '${LIC:-<none>}'"; fi
 else
-  ok "no escaped em-dashes in the catalog"
+  bad "local manifest retained" "deleted — the install smoke test cannot run"
 fi
+
+# ── 11. the license is declared, and it is the one LICENSE actually grants ───
+# The public catalog listed co-dialectic as "Proprietary" while LICENSE grants AGPL-3.0,
+# and plugin.json/package.json declared nothing. A public catalog mislabelling an AGPL
+# project is a trust problem, and it undercuts the open-source positioning that makes
+# this the top of the funnel in the first place.
+if head -3 "$ROOT/LICENSE" 2>/dev/null | grep -qi "AFFERO"; then
+  ok "LICENSE grants AGPL"
+else
+  bad "LICENSE grants AGPL" "unexpected LICENSE content"
+fi
+for f in "plugins/co-dialectic/.claude-plugin/plugin.json" "plugins/co-dialectic/package.json"; do
+  DECL=$(python3 -c "import json;print(json.load(open('$ROOT/$f')).get('license',''))" 2>/dev/null)
+  if [ "$DECL" = "AGPL-3.0" ]; then ok "$f declares AGPL-3.0"
+  else bad "$f declares AGPL-3.0" "got '${DECL:-<none>}'"; fi
+done
 
 rm -rf "${FAKE:-/nonexistent}"
 echo ""
